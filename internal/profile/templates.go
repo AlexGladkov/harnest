@@ -2,8 +2,13 @@ package profile
 
 // Embedded profile templates.
 // These are role-based (no hardcoded agents).
+// Each profile includes a ## Meta section for autodiscovery.
 
 const businessFeature = `# Profile: Business Feature
+
+## Meta
+- **Keywords:** фича, добавить, реализовать, новый экран, интеграция, API endpoint, feature, implement
+- **Description:** Новая функциональность, доработка, интеграция
 
 ## Workflow (STRICT)
 
@@ -70,6 +75,10 @@ If task touches multiple layers — run multiple exec agents in parallel.
 
 const bugHunting = `# Profile: Bug Hunting
 
+## Meta
+- **Keywords:** баг, ошибка, краш, не работает, ломается, исключение, stacktrace, NPE, 500, regression, bug, fix
+- **Description:** Баг, регрессия, краш, неожиданное поведение
+
 ## Workflow (STRICT)
 
 ### Stages
@@ -114,6 +123,10 @@ Agent determined by affected files via exec table in project CLAUDE.md.
 
 const research = `# Profile: Research
 
+## Meta
+- **Keywords:** как устроено, как работает, как реализовано, объясни, расскажи, что такое, исследуй, покажи архитектуру, explore
+- **Description:** Понять как что-то устроено, не планируя делать изменения
+
 ## Workflow
 1. **Research** — consilium investigates topic in parallel
 2. **Done** — structured answer in chat
@@ -132,6 +145,10 @@ No Plan, no Executing, no code changes.
 `
 
 const refactoring = `# Profile: Refactoring
+
+## Meta
+- **Keywords:** рефакторинг, refactor, почисти код, аудит кода, code review, clean up
+- **Description:** Улучшить качество существующего кода без смены функционала
 
 ## Workflow (STRICT)
 
@@ -163,6 +180,10 @@ const refactoring = `# Profile: Refactoring
 
 const e2eTesting = `# Profile: E2E Testing
 
+## Meta
+- **Keywords:** e2e, тестирование, прогнать тесты, smoke, прогнать сценарии, проверить платформы, запустить e2e, протестируй
+- **Description:** Прогон smoke/e2e сценариев, автофикс найденных проблем
+
 ## Workflow (STRICT)
 
 ### Stages
@@ -187,6 +208,10 @@ Fix agents resolve through project CLAUDE.md exec table.
 `
 
 const e2eAuthoring = `# Profile: E2E Scenario Authoring
+
+## Meta
+- **Keywords:** добавить e2e тест, завести smoke, новый сценарий, создать тест-кейс, написать e2e
+- **Description:** Исследование кода и создание нового сценария для прогонов
 
 ## Workflow (STRICT)
 

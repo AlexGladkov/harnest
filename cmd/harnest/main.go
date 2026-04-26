@@ -16,7 +16,7 @@ import (
 	"github.com/AlexGladkov/harnest/internal/wizard"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -162,7 +162,7 @@ func selectHarness() string {
 
 func runProfiles() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: harnest profiles <list|add|remove> [name]")
+		fmt.Fprintln(os.Stderr, "usage: harnest profiles <list|add|edit|remove> [name]")
 		os.Exit(1)
 	}
 
@@ -179,23 +179,35 @@ func runProfiles() {
 		}
 		fmt.Println("Installed profiles:")
 		for _, p := range profiles {
-			fmt.Printf("  - %s\n", p)
+			marker := ""
+			if profile.IsBuiltin(p) {
+				marker = " (builtin)"
+			}
+			fmt.Printf("  - %s%s\n", p, marker)
 		}
 
 	case "add":
 		if len(os.Args) < 4 {
 			fmt.Fprintln(os.Stderr, "usage: harnest profiles add <name>")
-			fmt.Println("\nAvailable: business-feature, bug-hunting, research, refactoring, e2e-testing, e2e-authoring")
 			os.Exit(1)
 		}
 		name := os.Args[3]
-		dest := parseFlag("--dest", "")
-		err := profile.Install(name, dest)
-		if err != nil {
+		reader := bufio.NewReader(os.Stdin)
+		if err := profile.Create(name, reader); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Profile '%s' installed.\n", name)
+
+	case "edit":
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "usage: harnest profiles edit <name>")
+			os.Exit(1)
+		}
+		name := os.Args[3]
+		if err := profile.Edit(name); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 
 	case "remove":
 		if len(os.Args) < 4 {
@@ -357,7 +369,7 @@ func hasFlag(flag string) bool {
 }
 
 func isSubcommand(s string) bool {
-	subs := []string{"list", "add", "remove", "set"}
+	subs := []string{"list", "add", "edit", "remove", "set"}
 	for _, sub := range subs {
 		if s == sub {
 			return true
@@ -374,7 +386,8 @@ Usage:
   harnest init [dir] [--harness claude-code|cursor|windsurf] [--non-interactive]
   harnest detect [dir]
   harnest profiles list
-  harnest profiles add <name> [--dest dir]
+  harnest profiles add <name>
+  harnest profiles edit <name>
   harnest profiles remove <name>
   harnest agents list [dir]
   harnest agents set <role> <agent>
@@ -386,7 +399,7 @@ Commands:
   install    Install Harnest framework (profiles + global CLAUDE.md)
   init       Detect stack and generate project config with agent wizard
   detect     Show detected stack without generating
-  profiles   Manage workflow profiles (business-feature, bug-hunting, etc.)
+  profiles   Manage workflow profiles (create custom, edit, list, remove)
   agents     View/modify agent role mappings
   convert    Convert config between AI assistants
   update     Update agent mappings and profiles
