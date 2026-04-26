@@ -123,14 +123,13 @@ func searchLoop(scanner *bufio.Scanner, available []string) string {
 			continue
 		}
 
-		if len(results) == 1 {
-			fmt.Printf("  → %s\n", results[0])
-			return results[0]
-		}
-
-		// Show filtered results
+		// Show filtered results — always, even if 1 match
 		showResults(results, input)
-		fmt.Print("  Pick #, refine, or Enter to cancel: ")
+		if len(results) == 1 {
+			fmt.Print("  Enter=accept, or refine: ")
+		} else {
+			fmt.Print("  Pick #, refine, or Enter to cancel: ")
+		}
 
 		if !scanner.Scan() {
 			return ""
@@ -138,6 +137,10 @@ func searchLoop(scanner *bufio.Scanner, available []string) string {
 		pick := strings.TrimSpace(scanner.Text())
 
 		if pick == "" {
+			if len(results) == 1 {
+				fmt.Printf("  → %s\n", results[0])
+				return results[0]
+			}
 			return ""
 		}
 
@@ -162,10 +165,6 @@ func searchLoop(scanner *bufio.Scanner, available []string) string {
 
 		// Treat as refined search
 		results = agents.Search(available, pick)
-		if len(results) == 1 {
-			fmt.Printf("  → %s\n", results[0])
-			return results[0]
-		}
 		if len(results) == 0 {
 			fmt.Printf("  No match for '%s'\n", pick)
 			fmt.Print("  Try again or Enter to cancel: ")
@@ -173,7 +172,11 @@ func searchLoop(scanner *bufio.Scanner, available []string) string {
 		}
 
 		showResults(results, pick)
-		fmt.Print("  Pick #, refine, or Enter to cancel: ")
+		if len(results) == 1 {
+			fmt.Print("  Enter=accept, or refine: ")
+		} else {
+			fmt.Print("  Pick #, refine, or Enter to cancel: ")
+		}
 	}
 }
 
