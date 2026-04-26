@@ -1,0 +1,4 @@
+/harnest
+dist/
+*.generated.md
+.DS_Store
