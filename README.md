@@ -8,9 +8,12 @@ Every AI coding tool needs project context. Manually maintaining `CLAUDE.md`, `.
 
 Harnest solves this with a three-layer system:
 
-![Three layers of the system](docs/layers.jpg)
-
-![Request processing flow](docs/flow.jpg)
+<table>
+<tr>
+<td><img src="docs/layers.jpg" alt="Three layers of the system" /></td>
+<td><img src="docs/flow.jpg" alt="Request processing flow" /></td>
+</tr>
+</table>
 
 ## Install
 
