@@ -204,49 +204,44 @@ func Create(name string, r *bufio.Reader) error {
 
 	fmt.Printf("\nCreating profile: %s\n", name)
 
-	allRoles := []string{"architect", "frontend", "ui", "security", "devops", "api", "diagnostics", "test"}
+	allRoles := []string{"architect", "frontend", "ui", "security", "devops", "api", "diagnostics", "test", "mobile"}
 	allStages := []string{"Research", "Plan", "Executing", "Validation", "Report", "Done",
 		"Reproduce", "Diagnose", "Fix", "Smoke Test",
 		"Audit", "Prepare", "Deploy", "Run", "Re-run",
 		"Propose", "Approve", "Save", "Verify"}
 
-	// Step 1: Pick stages
-	fmt.Printf("\nAvailable stages:\n")
-	for i, s := range allStages {
-		fmt.Printf("  %2d) %s\n", i+1, s)
-	}
-	fmt.Println()
-
-	selectedStr := prompt(r, "Select stages by numbers (comma-separated, e.g. 1,3,4,5,6) or type custom names")
-
-	var selectedNames []string
-	for _, part := range strings.Split(selectedStr, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		// Try as number
-		idx := 0
-		if _, err := fmt.Sscanf(part, "%d", &idx); err == nil && idx >= 1 && idx <= len(allStages) {
-			selectedNames = append(selectedNames, allStages[idx-1])
-		} else {
-			// Custom name
-			selectedNames = append(selectedNames, part)
-		}
-	}
-
-	if len(selectedNames) == 0 {
-		return fmt.Errorf("at least one stage required")
-	}
-
-	// Step 2: For each stage, configure agent type + roles
+	// Step 1: Add stages one at a time
 	var stages []stage
-	for i, sName := range selectedNames {
-		fmt.Printf("\n--- Stage %d: %s ---\n", i+1, sName)
+	for {
+		stageNum := len(stages) + 1
+		fmt.Printf("\n--- Stage %d ---\n", stageNum)
+		fmt.Printf("Available stages:\n")
+		for i, s := range allStages {
+			fmt.Printf("  %2d) %s\n", i+1, s)
+		}
+		fmt.Println()
 
+		picked := prompt(r, "Stage (number or custom name)")
+		picked = strings.TrimSpace(picked)
+		if picked == "" {
+			if len(stages) == 0 {
+				fmt.Println("At least one stage required.")
+				continue
+			}
+			break
+		}
+
+		stageName := picked
+		idx := 0
+		if _, err := fmt.Sscanf(picked, "%d", &idx); err == nil && idx >= 1 && idx <= len(allStages) {
+			stageName = allStages[idx-1]
+		}
+
+		// Agent type
 		agentType := promptChoice(r, "Agent type", []string{"single", "consilium", "bash", "none"})
-		s := stage{Name: sName, AgentType: agentType}
+		s := stage{Name: stageName, AgentType: agentType}
 
+		// Role(s)
 		switch agentType {
 		case "consilium":
 			fmt.Printf("Available roles: %s\n", strings.Join(allRoles, ", "))
@@ -266,37 +261,30 @@ func Create(name string, r *bufio.Reader) error {
 		}
 
 		stages = append(stages, s)
-	}
+		fmt.Printf("  ✓ Added: %s (%s)\n", stageName, agentType)
 
-	// Step 3: Transitions — show matrix
-	fmt.Printf("\n--- Transitions ---\n")
-	fmt.Println("For each stage, select which stages it can transition to.")
-	stageNames := make([]string, len(stages))
-	for i, s := range stages {
-		stageNames[i] = s.Name
-	}
-
-	for i := range stages {
-		// Build list of possible targets (all stages except self)
-		var targets []string
-		for j, sn := range stageNames {
-			if j != i {
-				targets = append(targets, sn)
-			}
-		}
-		if len(targets) == 0 {
-			continue
-		}
-		fmt.Printf("\n%s → can go to: %s\n", stages[i].Name, strings.Join(targets, ", "))
-		transStr := prompt(r, fmt.Sprintf("Transitions from %s (comma-separated, Enter to skip)", stages[i].Name))
-		for _, t := range strings.Split(transStr, ",") {
-			t = strings.TrimSpace(t)
-			if t != "" {
-				stages[i].Transitions = append(stages[i].Transitions, t)
-			}
+		more := promptChoice(r, "Add another stage?", []string{"y", "n"})
+		if more == "n" {
+			break
 		}
 	}
 
+	if len(stages) == 0 {
+		return fmt.Errorf("at least one stage required")
+	}
+
+	// Step 2: Auto-generate transitions
+	generateTransitions(stages)
+
+	fmt.Printf("\n--- Auto-generated transitions ---\n")
+	for _, s := range stages {
+		if len(s.Transitions) > 0 {
+			fmt.Printf("  %s → %s\n", s.Name, strings.Join(s.Transitions, ", "))
+		}
+	}
+	fmt.Println("(edit the profile file to customize transitions)")
+
+	// Step 3: Meta
 	keywords := prompt(r, "\nKeywords (comma-separated)")
 	description := prompt(r, "Description")
 
@@ -322,6 +310,55 @@ func Create(name string, r *bufio.Reader) error {
 	fmt.Printf("\nProfile '%s' created.\n", name)
 	fmt.Printf("  → %s\n", path)
 	return nil
+}
+
+// generateTransitions builds transitions heuristic:
+// - Linear chain: each stage → next stage
+// - Validation/Smoke Test → rollback to Executing, Fix, or Research
+// - Report → Done (if both exist)
+func generateTransitions(stages []stage) {
+	nameSet := make(map[string]bool)
+	for _, s := range stages {
+		nameSet[s.Name] = true
+	}
+
+	for i := range stages {
+		// Forward: current → next
+		if i+1 < len(stages) {
+			stages[i].Transitions = append(stages[i].Transitions, stages[i+1].Name)
+		}
+
+		// Rollback heuristics
+		switch stages[i].Name {
+		case "Validation", "Smoke Test", "Verify":
+			for _, target := range []string{"Executing", "Fix", "Research"} {
+				if nameSet[target] && target != stages[i].Name {
+					stages[i].Transitions = append(stages[i].Transitions, target)
+				}
+			}
+		case "Re-run":
+			for _, target := range []string{"Fix", "Run"} {
+				if nameSet[target] {
+					stages[i].Transitions = append(stages[i].Transitions, target)
+				}
+			}
+		case "Report":
+			if nameSet["Done"] {
+				// Already added via linear chain if Done is next,
+				// but add explicitly if not adjacent
+				hasDone := false
+				for _, t := range stages[i].Transitions {
+					if t == "Done" {
+						hasDone = true
+						break
+					}
+				}
+				if !hasDone {
+					stages[i].Transitions = append(stages[i].Transitions, "Done")
+				}
+			}
+		}
+	}
 }
 
 type stage struct {
