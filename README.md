@@ -1,15 +1,14 @@
 # Harnest
 
-AI coding assistant configurator. Detects your project stack and generates optimal agent configs for Claude Code, Cursor, Windsurf, and more.
+AI coding assistant configurator. Detects your project stack, runs an interactive agent wizard, and generates configs for Claude Code, Cursor, and Windsurf.
 
-## Problem
+## About
 
-Every AI coding tool needs project context. Each tool has its own config format. Manually maintaining `CLAUDE.md`, `.cursorrules`, `.windsurfrules` is tedious — especially for multi-stack projects where wrong agents get assigned (Java agents reviewing Swift code).
+Every AI coding tool needs project context. Manually maintaining `CLAUDE.md`, `.cursorrules`, `.windsurfrules` is tedious — especially for multi-stack projects where wrong agents get assigned.
 
-## Solution
+Harnest detects your stack, suggests agents, and lets you pick:
 
 ```bash
-$ cd my-project
 $ harnest init
 
 Detected stack:
@@ -17,13 +16,6 @@ Detected stack:
   - compose-multiplatform (kotlin) [composeApp/]
   - ios-native (swift) [iosApp/]
   - vue (typescript) [vue-frontend/]
-
-Target harness:
-  > 1) claude-code
-    2) cursor
-    3) windsurf
-
-Select [1]: 1
 
 ── Agent Wizard ──
 Enter = accept suggestion, s = skip, or type agent name
@@ -41,11 +33,9 @@ Generated: CLAUDE.md
   Exec agents: 4
 ```
 
-One command. You choose the agents. Suggestions based on your stack.
-
 ## Install
 
-### 1. Get the binary
+**1. Get the binary**
 
 ```bash
 brew tap AlexGladkov/tap
@@ -58,113 +48,109 @@ Or with Go:
 go install github.com/AlexGladkov/harnest/cmd/harnest@latest
 ```
 
-Or download binary from [Releases](https://github.com/AlexGladkov/harnest/releases).
+Or download from [Releases](https://github.com/AlexGladkov/harnest/releases).
 
-### 2. Install the framework
-
-```bash
-harnest install
-```
-
-This installs:
-- 6 workflow profiles → `~/.claude/profiles/`
-- Global CLAUDE.md framework → `~/.claude/CLAUDE.md`
-
-The global config defines profile routing, role definitions, and shared rules. It uses `<!-- harnest-managed -->` markers — your custom content outside these markers is preserved on updates.
-
-## Commands
-
-### `harnest install`
-
-Install (or update) the Harnest framework — profiles and global CLAUDE.md.
+**2. Install the framework**
 
 ```bash
 harnest install
 ```
 
-### `harnest init`
+Installs 6 workflow profiles and global CLAUDE.md framework to `~/.claude/`. Uses `<!-- harnest-managed -->` markers — your custom content is preserved on updates.
 
-Interactive project setup with agent wizard. Detects stack, asks you to pick agents for each role and exec scope.
+## Scenarios
+
+### Generate project config (interactive)
 
 ```bash
-# Interactive (recommended)
-harnest init [dir]
+cd my-project
+harnest init
+```
 
-# Specify harness
+Detects stack → select harness (Claude Code / Cursor / Windsurf) → agent wizard for each role and exec scope → generates config file.
+
+### Generate for a specific harness
+
+```bash
 harnest init --harness cursor
+```
 
-# CI/scripts — use suggestions without wizard
+### CI / scripts (no wizard)
+
+```bash
 harnest init --non-interactive
 ```
 
-### Other commands
+Uses suggested agents automatically. Defaults to Claude Code harness.
+
+### Detect stack without generating
 
 ```bash
-# Detect stack without generating
-harnest detect [dir]
-
-# View current agent mappings
-harnest agents list [dir]
-
-# Override a role
-harnest agents set architect my-architect-agent
-
-# Install individual profiles
-harnest profiles list
-harnest profiles add business-feature
-
-# Convert between tools
-harnest convert --from claude-code --to cursor
-
-# Check for updates
-harnest update
+harnest detect
 ```
 
-## Architecture
+### View / override agent mappings
 
-Harnest generates configs based on a **three-layer system** that separates concerns and allows maximum reuse across projects.
+```bash
+harnest agents list
+harnest agents set architect my-architect-agent
+```
 
-### Three Layers
+### Convert between harnesses
+
+```bash
+harnest convert --from claude-code --to cursor
+```
+
+### Manage profiles individually
+
+```bash
+harnest profiles list
+harnest profiles add business-feature
+harnest profiles remove research
+```
+
+## Package
+
+### What `harnest install` sets up
+
+**6 workflow profiles** → `~/.claude/profiles/`
+
+| Profile | Stages |
+|---------|--------|
+| business-feature | Research → Plan → Executing → Validation → Report |
+| bug-hunting | Reproduce → Diagnose → Fix → Validation → Report |
+| research | Consilium investigation, no code changes |
+| refactoring | Audit → Plan → Executing → Regression check |
+| e2e-testing | Prepare → Deploy → Run → Fix → Re-run → Report |
+| e2e-authoring | Research → Propose → Approve → Save scenarios |
+
+**Global CLAUDE.md** → `~/.claude/CLAUDE.md`
+
+Profile routing (auto-detect by keywords), role definitions, agent resolution rules, validation rules (playwright, mobile MCP), reporting format.
+
+### Architecture
+
+Three-layer system. One profile works for any project — agents differ per project, stages stay the same.
 
 ![Three layers of the system](docs/layers.jpg)
 
-**Layer 1 — Global CLAUDE.md** (`~/.claude/CLAUDE.md`):
-- Routes user requests to the right workflow profile
-- Defines ALL available roles and resolution rules
-- Exec agent scope-matching rules
-- Shared rules (validation, reporting, playwright)
-
-**Layer 2 — Profile** (e.g. `business-feature.md`):
-- Defines workflow stages and allowed transitions (Research → Plan → Executing → Validation → Report)
-- Specifies which ROLES are needed at each stage
-- Contains NO concrete agents — only roles
-
-**Layer 3 — Project CLAUDE.md** (generated by `harnest init`):
-- Design system reference
-- Stack and URLs
-- Consilium: role → concrete agent mapping (chosen by you in wizard)
-- Executing: agent + file scope
-- Anything not specified → falls back to asking the user
-
-This separation means **one profile works for any project**. The same `business-feature.md` drives a KMP app, an iOS app, and a Python bot — each with different agents from its project config.
-
-### Request Flow
-
 ![Request processing flow](docs/flow.jpg)
 
-When a user sends a request like "add Share button to iOS and Android":
+### 8 consilium roles
 
-1. **Global CLAUDE.md** auto-detects profile by keywords ("add" → Business Feature), confirms with user, loads profile
-2. **Profile** defines stages and roles — Research needs `architect`, `frontend`, `ui`, etc.; Executing needs exec agents matched by file scope
-3. **Agent Resolution** — for each role, check project CLAUDE.md for mapping. Found → use project agent. Not found → ask user
-4. **Executing** — changed files matched against scope patterns: `composeApp/**/*.kt` → your chosen agent, `iosApp/**/*.swift` → your chosen agent
-5. **Validation** — platform-specific tools: Web via playwright-cli, Android/iOS/Desktop via mobile MCP skills, Backend via curl/tests
+| Role | Purpose |
+|------|---------|
+| architect | Architecture, modules, dependencies, SOLID |
+| frontend | UI/UX review, frontend patterns |
+| ui | Visual design, UX, components |
+| security | OWASP, vulnerabilities, auth |
+| devops | Infrastructure, CI/CD, deployment |
+| api | API contracts, REST/GraphQL |
+| diagnostics | Logs, stacktraces, debugging |
+| test | Test coverage, quality |
 
-## How It Works
-
-### Stack Detection
-
-Harnest scans your project for build files and frameworks:
+### Stack detection
 
 | Indicator | Detected Stack |
 |-----------|---------------|
@@ -183,49 +169,13 @@ Harnest scans your project for build files and frameworks:
 | `pyproject.toml` + django | Django |
 | `pyproject.toml` + flask | Flask |
 
-### Agent Role System
-
-Generated configs use a **role-based** agent system:
-
-**Consilium roles** (analyze code, don't write it):
-- `architect` — architecture, modules, dependencies
-- `frontend` — UI/UX review, frontend patterns
-- `ui` — visual design, UX, components
-- `security` — OWASP, vulnerabilities, auth
-- `devops` — infrastructure, CI/CD, deployment
-- `api` — API contracts, REST/GraphQL
-- `diagnostics` — logs, stacktraces, debugging
-- `test` — test coverage, quality
-
-**Exec agents** (write code, matched by file scope) — you pick the agent for each scope during `harnest init`:
-
-```
-backend/**/*.kt    → <your choice>
-composeApp/**/*.kt → <your choice>
-iosApp/**/*.swift  → <your choice>
-vue-frontend/**    → <your choice>
-```
-
-### Multi-Harness Output
-
-Same detection, different output formats:
+### Harness output formats
 
 | Harness | Output File | Features |
 |---------|------------|----------|
 | Claude Code | `CLAUDE.md` | Full consilium + exec scope + profiles |
 | Cursor | `.cursorrules` | Expert roles + file ownership |
 | Windsurf | `.windsurfrules` | Stack context + code areas |
-
-### Workflow Profiles
-
-Built-in workflow templates (for Claude Code):
-
-- **business-feature** — Research → Plan → Executing → Validation → Report
-- **bug-hunting** — Reproduce → Diagnose → Fix → Validation → Report
-- **research** — Consilium investigation, no code changes
-- **refactoring** — Audit → Plan → Executing → Regression check
-- **e2e-testing** — Prepare → Deploy → Run → Fix → Re-run → Report
-- **e2e-authoring** — Research → Propose → Approve → Save scenarios
 
 ## License
 
