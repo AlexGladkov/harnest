@@ -18,12 +18,12 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 
 	fmt.Println("\n── Agent Wizard ──")
 	fmt.Printf("Found %d agents on this machine\n", len(available))
-	fmt.Println("Enter = accept suggestion, s = skip, ? = search agents\n")
+	fmt.Println("Enter = accept suggestion, s = skip, or type to search\n")
 
 	// Consilium roles
 	for _, role := range structure.Roles {
 		suggestion := suggestions.Consilium[role]
-		agent := promptRole(scanner, role, suggestion, available)
+		agent := pickAgent(scanner, fmt.Sprintf("Consilium: %s", role), suggestion, available)
 		if agent != "" {
 			config.Consilium = append(config.Consilium, mapping.ConsiliumRole{
 				Role:  role,
@@ -38,7 +38,7 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 	}
 	for _, es := range structure.ExecScopes {
 		suggestion := suggestions.Exec[es.StackName]
-		agent := promptExec(scanner, es, suggestion, available)
+		agent := pickAgent(scanner, fmt.Sprintf("Exec: %s → %s", es.StackName, es.Scope), suggestion, available)
 		if agent != "" {
 			config.Exec = append(config.Exec, mapping.ExecAgent{
 				Agent: agent,
@@ -51,12 +51,15 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 	return config
 }
 
-func promptRole(scanner *bufio.Scanner, role, suggestion string, available []string) string {
+// pickAgent interactive loop: type to search, Enter to accept, s to skip.
+func pickAgent(scanner *bufio.Scanner, label, suggestion string, available []string) string {
 	for {
+		fmt.Printf("[%s]\n", label)
 		if suggestion != "" {
-			fmt.Printf("[Consilium: %s]\n  Suggestion: %s\n  (Enter=accept, s=skip, ?=search): ", role, suggestion)
+			fmt.Printf("  Suggestion: %s\n", suggestion)
+			fmt.Print("  Enter=accept, s=skip, or type to search: ")
 		} else {
-			fmt.Printf("[Consilium: %s]\n  (type to search, s=skip, ?=list all): ", role)
+			fmt.Print("  Type to search, s=skip: ")
 		}
 
 		if !scanner.Scan() {
@@ -69,119 +72,46 @@ func promptRole(scanner *bufio.Scanner, role, suggestion string, available []str
 			return ""
 		case input == "" && suggestion != "":
 			return suggestion
-		case input == "?" || (input == "" && suggestion == ""):
-			picked := searchAndPick(scanner, available, "")
-			if picked != "" {
-				return picked
-			}
+		case input == "":
 			continue
 		default:
-			// Check if input matches an agent or is a search query
+			// Exact match — accept immediately
 			for _, a := range available {
 				if a == input {
 					return input
 				}
 			}
-			// Try as search
-			results := agents.Search(available, input)
-			if len(results) == 1 {
-				fmt.Printf("  → %s\n", results[0])
-				return results[0]
+
+			// Search and show results
+			result := searchLoop(scanner, available, input)
+			if result != "" {
+				return result
 			}
-			if len(results) > 1 {
-				picked := searchAndPick(scanner, available, input)
-				if picked != "" {
-					return picked
-				}
-				continue
-			}
-			// No match — use as literal agent name
-			fmt.Printf("  Agent '%s' not found locally. Use anyway? (y/n): ", input)
-			if scanner.Scan() && strings.TrimSpace(scanner.Text()) == "y" {
-				return input
-			}
+			// User went back — re-show prompt
 			continue
 		}
 	}
 }
 
-func promptExec(scanner *bufio.Scanner, es mapping.ExecScope, suggestion string, available []string) string {
-	for {
-		if suggestion != "" {
-			fmt.Printf("[Exec: %s → %s]\n  Suggestion: %s\n  (Enter=accept, s=skip, ?=search): ", es.StackName, es.Scope, suggestion)
-		} else {
-			fmt.Printf("[Exec: %s → %s]\n  (type to search, s=skip, ?=list all): ", es.StackName, es.Scope)
-		}
-
-		if !scanner.Scan() {
-			return suggestion
-		}
-		input := strings.TrimSpace(scanner.Text())
-
-		switch {
-		case input == "s":
-			return ""
-		case input == "" && suggestion != "":
-			return suggestion
-		case input == "?" || (input == "" && suggestion == ""):
-			picked := searchAndPick(scanner, available, "")
-			if picked != "" {
-				return picked
-			}
-			continue
-		default:
-			for _, a := range available {
-				if a == input {
-					return input
-				}
-			}
-			results := agents.Search(available, input)
-			if len(results) == 1 {
-				fmt.Printf("  → %s\n", results[0])
-				return results[0]
-			}
-			if len(results) > 1 {
-				picked := searchAndPick(scanner, available, input)
-				if picked != "" {
-					return picked
-				}
-				continue
-			}
-			fmt.Printf("  Agent '%s' not found locally. Use anyway? (y/n): ", input)
-			if scanner.Scan() && strings.TrimSpace(scanner.Text()) == "y" {
-				return input
-			}
-			continue
-		}
-	}
-}
-
-// searchAndPick shows filtered list, user picks by number or refines search.
-func searchAndPick(scanner *bufio.Scanner, available []string, query string) string {
+// searchLoop shows filtered results, user refines or picks.
+func searchLoop(scanner *bufio.Scanner, available []string, query string) string {
 	for {
 		results := agents.Search(available, query)
+
 		if len(results) == 0 {
-			fmt.Printf("  No agents matching '%s'. Try again (or Enter to go back): ", query)
-			if !scanner.Scan() {
-				return ""
+			fmt.Printf("  No match for '%s'. Refine or Enter to go back: ", query)
+		} else if len(results) == 1 {
+			// Single match — auto-select
+			fmt.Printf("  → %s\n", results[0])
+			return results[0]
+		} else {
+			fmt.Printf("  Matches for '%s':\n", query)
+			for _, a := range results {
+				fmt.Printf("    %s\n", a)
 			}
-			query = strings.TrimSpace(scanner.Text())
-			if query == "" {
-				return ""
-			}
-			continue
+			fmt.Print("  Refine search or Enter to go back: ")
 		}
 
-		fmt.Printf("  Agents")
-		if query != "" {
-			fmt.Printf(" matching '%s'", query)
-		}
-		fmt.Printf(" (%d):\n", len(results))
-		for i, a := range results {
-			fmt.Printf("  %3d) %s\n", i+1, a)
-		}
-
-		fmt.Print("  Pick number, refine search, or Enter to go back: ")
 		if !scanner.Scan() {
 			return ""
 		}
@@ -190,15 +120,15 @@ func searchAndPick(scanner *bufio.Scanner, available []string, query string) str
 			return ""
 		}
 
-		// Try as number
-		idx := 0
-		if _, err := fmt.Sscanf(input, "%d", &idx); err == nil && idx >= 1 && idx <= len(results) {
-			picked := results[idx-1]
-			fmt.Printf("  → %s\n", picked)
-			return picked
+		// Check exact match
+		for _, a := range available {
+			if a == input {
+				fmt.Printf("  → %s\n", a)
+				return a
+			}
 		}
 
-		// Refine search
+		// Refine
 		query = input
 	}
 }
