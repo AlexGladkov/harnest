@@ -10,6 +10,8 @@ import (
 	"github.com/AlexGladkov/harnest/internal/mapping"
 )
 
+const maxSuggestions = 5
+
 func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Suggestions) mapping.AgentConfig {
 	scanner := bufio.NewScanner(r)
 	config := mapping.AgentConfig{}
@@ -18,7 +20,7 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 
 	fmt.Println("\n── Agent Wizard ──")
 	fmt.Printf("Found %d agents on this machine\n", len(available))
-	fmt.Println("Enter = accept suggestion, s = skip, or type to search\n")
+	fmt.Println("Enter = accept suggestion, s = skip, ? = search\n")
 
 	// Consilium roles
 	for _, role := range structure.Roles {
@@ -51,67 +53,78 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 	return config
 }
 
-// pickAgent interactive loop: type to search, Enter to accept, s to skip.
 func pickAgent(scanner *bufio.Scanner, label, suggestion string, available []string) string {
-	for {
-		fmt.Printf("[%s]\n", label)
-		if suggestion != "" {
-			fmt.Printf("  Suggestion: %s\n", suggestion)
-			fmt.Print("  Enter=accept, s=skip, or type to search: ")
-		} else {
-			fmt.Print("  Type to search, s=skip: ")
-		}
+	if suggestion != "" {
+		fmt.Printf("[%s]\n  Suggestion: %s\n  (Enter=accept, s=skip, ?=search): ", label, suggestion)
+	} else {
+		fmt.Printf("[%s]\n  (s=skip, ?=search): ", label)
+	}
 
-		if !scanner.Scan() {
-			return suggestion
-		}
-		input := strings.TrimSpace(scanner.Text())
+	if !scanner.Scan() {
+		return suggestion
+	}
+	input := strings.TrimSpace(scanner.Text())
 
-		switch {
-		case input == "s":
-			return ""
-		case input == "" && suggestion != "":
-			return suggestion
-		case input == "":
-			continue
-		default:
-			// Exact match — accept immediately
-			for _, a := range available {
-				if a == input {
-					return input
-				}
+	switch {
+	case input == "s":
+		return ""
+	case input == "" && suggestion != "":
+		return suggestion
+	case input == "?":
+		return searchMode(scanner, available)
+	default:
+		// Exact match check
+		for _, a := range available {
+			if a == input {
+				return input
 			}
-
-			// Search and show results
-			result := searchLoop(scanner, available, input)
-			if result != "" {
-				return result
-			}
-			// User went back — re-show prompt
-			continue
 		}
+		// Not found — use as literal
+		fmt.Printf("  '%s' not found locally. Use anyway? (y/n): ", input)
+		if scanner.Scan() && strings.TrimSpace(scanner.Text()) == "y" {
+			return input
+		}
+		return ""
 	}
 }
 
-// searchLoop shows filtered results, user refines or picks.
-func searchLoop(scanner *bufio.Scanner, available []string, query string) string {
+// searchMode: interactive search loop. Type to filter, see top 5, refine or pick.
+func searchMode(scanner *bufio.Scanner, available []string) string {
+	fmt.Print("  Search: ")
 	for {
+		if !scanner.Scan() {
+			return ""
+		}
+		query := strings.TrimSpace(scanner.Text())
+		if query == "" {
+			return ""
+		}
+
 		results := agents.Search(available, query)
 
 		if len(results) == 0 {
-			fmt.Printf("  No match for '%s'. Refine or Enter to go back: ", query)
-		} else if len(results) == 1 {
-			// Single match — auto-select
-			fmt.Printf("  → %s\n", results[0])
-			return results[0]
-		} else {
-			fmt.Printf("  Matches for '%s':\n", query)
-			for _, a := range results {
-				fmt.Printf("    %s\n", a)
-			}
-			fmt.Print("  Refine search or Enter to go back: ")
+			fmt.Printf("  No match for '%s'. Try again or Enter to cancel: ", query)
+			continue
 		}
 
+		if len(results) == 1 {
+			fmt.Printf("  → %s\n", results[0])
+			return results[0]
+		}
+
+		// Show top 5
+		show := results
+		if len(show) > maxSuggestions {
+			show = show[:maxSuggestions]
+		}
+		for i, a := range show {
+			fmt.Printf("    %d) %s\n", i+1, a)
+		}
+		if len(results) > maxSuggestions {
+			fmt.Printf("    ... and %d more\n", len(results)-maxSuggestions)
+		}
+
+		fmt.Print("  Pick number, refine, or Enter to cancel: ")
 		if !scanner.Scan() {
 			return ""
 		}
@@ -120,7 +133,14 @@ func searchLoop(scanner *bufio.Scanner, available []string, query string) string
 			return ""
 		}
 
-		// Check exact match
+		// Try number
+		idx := 0
+		if _, err := fmt.Sscanf(input, "%d", &idx); err == nil && idx >= 1 && idx <= len(show) {
+			fmt.Printf("  → %s\n", show[idx-1])
+			return show[idx-1]
+		}
+
+		// Exact match
 		for _, a := range available {
 			if a == input {
 				fmt.Printf("  → %s\n", a)
@@ -128,7 +148,27 @@ func searchLoop(scanner *bufio.Scanner, available []string, query string) string
 			}
 		}
 
-		// Refine
-		query = input
+		// Refine — loop again with new query
+		results = agents.Search(available, input)
+		if len(results) == 1 {
+			fmt.Printf("  → %s\n", results[0])
+			return results[0]
+		}
+		if len(results) == 0 {
+			fmt.Printf("  No match for '%s'. Try again or Enter to cancel: ", input)
+			continue
+		}
+
+		show = results
+		if len(show) > maxSuggestions {
+			show = show[:maxSuggestions]
+		}
+		for i, a := range show {
+			fmt.Printf("    %d) %s\n", i+1, a)
+		}
+		if len(results) > maxSuggestions {
+			fmt.Printf("    ... and %d more\n", len(results)-maxSuggestions)
+		}
+		fmt.Print("  Pick number, refine, or Enter to cancel: ")
 	}
 }
