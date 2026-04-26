@@ -90,7 +90,18 @@ func pickAgent(scanner *bufio.Scanner, label, suggestion string, available []str
 
 // searchMode: interactive search loop. Type to filter, see top 5, refine or pick.
 func searchMode(scanner *bufio.Scanner, available []string) string {
-	fmt.Print("  Search: ")
+	// Show initial top 5 so user sees what's available
+	show := available
+	if len(show) > maxSuggestions {
+		show = show[:maxSuggestions]
+	}
+	for i, a := range show {
+		fmt.Printf("    %d) %s\n", i+1, a)
+	}
+	if len(available) > maxSuggestions {
+		fmt.Printf("    ... and %d more (type to filter)\n", len(available)-maxSuggestions)
+	}
+	fmt.Print("  Search or pick number: ")
 	for {
 		if !scanner.Scan() {
 			return ""
