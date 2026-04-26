@@ -205,20 +205,46 @@ func Create(name string, r *bufio.Reader) error {
 	fmt.Printf("\nCreating profile: %s\n", name)
 
 	allRoles := []string{"architect", "frontend", "ui", "security", "devops", "api", "diagnostics", "test"}
+	allStages := []string{"Research", "Plan", "Executing", "Validation", "Report", "Done",
+		"Reproduce", "Diagnose", "Fix", "Smoke Test",
+		"Audit", "Prepare", "Deploy", "Run", "Re-run",
+		"Propose", "Approve", "Save", "Verify"}
 
-	var stages []stage
+	// Step 1: Pick stages
+	fmt.Printf("\nAvailable stages:\n")
+	for i, s := range allStages {
+		fmt.Printf("  %2d) %s\n", i+1, s)
+	}
+	fmt.Println()
 
-	for i := 1; ; i++ {
-		fmt.Printf("\n--- Stage %d ---\n", i)
+	selectedStr := prompt(r, "Select stages by numbers (comma-separated, e.g. 1,3,4,5,6) or type custom names")
 
-		sName := prompt(r, "Stage name")
-		if sName == "" {
-			fmt.Println("Stage name is required.")
+	var selectedNames []string
+	for _, part := range strings.Split(selectedStr, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
 			continue
 		}
+		// Try as number
+		idx := 0
+		if _, err := fmt.Sscanf(part, "%d", &idx); err == nil && idx >= 1 && idx <= len(allStages) {
+			selectedNames = append(selectedNames, allStages[idx-1])
+		} else {
+			// Custom name
+			selectedNames = append(selectedNames, part)
+		}
+	}
+
+	if len(selectedNames) == 0 {
+		return fmt.Errorf("at least one stage required")
+	}
+
+	// Step 2: For each stage, configure agent type + roles
+	var stages []stage
+	for i, sName := range selectedNames {
+		fmt.Printf("\n--- Stage %d: %s ---\n", i+1, sName)
 
 		agentType := promptChoice(r, "Agent type", []string{"single", "consilium", "bash", "none"})
-
 		s := stage{Name: sName, AgentType: agentType}
 
 		switch agentType {
@@ -239,26 +265,35 @@ func Create(name string, r *bufio.Reader) error {
 			}
 		}
 
-		if len(stages) > 0 {
-			existing := make([]string, len(stages))
-			for j, st := range stages {
-				existing[j] = st.Name
+		stages = append(stages, s)
+	}
+
+	// Step 3: Transitions — show matrix
+	fmt.Printf("\n--- Transitions ---\n")
+	fmt.Println("For each stage, select which stages it can transition to.")
+	stageNames := make([]string, len(stages))
+	for i, s := range stages {
+		stageNames[i] = s.Name
+	}
+
+	for i := range stages {
+		// Build list of possible targets (all stages except self)
+		var targets []string
+		for j, sn := range stageNames {
+			if j != i {
+				targets = append(targets, sn)
 			}
-			fmt.Printf("Existing stages: %s\n", strings.Join(existing, ", "))
 		}
-		transStr := prompt(r, fmt.Sprintf("After %s, allowed transitions (comma-separated stage names)", sName))
+		if len(targets) == 0 {
+			continue
+		}
+		fmt.Printf("\n%s → can go to: %s\n", stages[i].Name, strings.Join(targets, ", "))
+		transStr := prompt(r, fmt.Sprintf("Transitions from %s (comma-separated, Enter to skip)", stages[i].Name))
 		for _, t := range strings.Split(transStr, ",") {
 			t = strings.TrimSpace(t)
 			if t != "" {
-				s.Transitions = append(s.Transitions, t)
+				stages[i].Transitions = append(stages[i].Transitions, t)
 			}
-		}
-
-		stages = append(stages, s)
-
-		more := prompt(r, "Add another stage? (y/n)")
-		if strings.ToLower(more) != "y" {
-			break
 		}
 	}
 
