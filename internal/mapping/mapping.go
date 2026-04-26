@@ -38,6 +38,12 @@ var frontendMap = map[string]string{
 	"swiftui":   "voltagent-lang:swift-expert",
 }
 
+var mobileMap = map[string]string{
+	"kotlin":  "kotlin-multiplatform-developer",
+	"swift":   "voltagent-lang:swift-expert",
+	"dart":    "voltagent-lang:flutter-expert",
+}
+
 var securityMap = map[string]string{
 	"kotlin": "security-kotlin",
 }
@@ -74,12 +80,14 @@ var execMap = map[string]ExecAgent{
 }
 
 const (
-	defaultUI      = "voltagent-core-dev:ui-designer"
-	defaultDevops  = "devops-orchestrator"
-	defaultAPI     = "voltagent-core-dev:api-designer"
+	defaultFrontend = "voltagent-lang:vue-expert"
+	defaultUI       = "voltagent-core-dev:ui-designer"
 	defaultSecurity = "voltagent-infra:security-engineer"
-	defaultDiag    = "kotlin-diagnostics"
-	defaultTest    = "test-spring"
+	defaultDevops   = "devops-orchestrator"
+	defaultAPI      = "voltagent-core-dev:api-designer"
+	defaultDiag     = "kotlin-diagnostics"
+	defaultTest     = "test-spring"
+	defaultMobile   = "kotlin-multiplatform-developer"
 )
 
 func Resolve(stacks []detector.Stack) AgentConfig {
@@ -106,13 +114,10 @@ func Resolve(stacks []detector.Stack) AgentConfig {
 		Agent: lookupOrDefault(architectMap, primaryLang, "voltagent-lang:java-architect"),
 	})
 
-	if frontendName != "" {
-		config.Consilium = append(config.Consilium, ConsiliumRole{
-			Role:  "frontend",
-			Agent: lookupOrDefault(frontendMap, frontendName, "voltagent-lang:vue-expert"),
-		})
-	}
-
+	config.Consilium = append(config.Consilium, ConsiliumRole{
+		Role:  "frontend",
+		Agent: lookupOrDefault(frontendMap, frontendName, defaultFrontend),
+	})
 	config.Consilium = append(config.Consilium, ConsiliumRole{Role: "ui", Agent: defaultUI})
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "security",
@@ -127,6 +132,10 @@ func Resolve(stacks []detector.Stack) AgentConfig {
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "test",
 		Agent: lookupOrDefault(testMap, primaryLang, defaultTest),
+	})
+	config.Consilium = append(config.Consilium, ConsiliumRole{
+		Role:  "mobile",
+		Agent: lookupOrDefault(mobileMap, primaryLang, defaultMobile),
 	})
 
 	// Exec agents from detected stacks
@@ -167,8 +176,8 @@ type Suggestions struct {
 func ResolveStructure(stacks []detector.Stack) AgentStructure {
 	s := AgentStructure{}
 
-	// Always include all 8 roles
-	s.Roles = []string{"architect", "frontend", "ui", "security", "devops", "api", "diagnostics", "test"}
+	// Always include all 9 roles
+	s.Roles = []string{"architect", "frontend", "ui", "security", "devops", "api", "diagnostics", "test", "mobile"}
 
 	// Exec scopes from detected stacks
 	for _, st := range stacks {
@@ -203,29 +212,16 @@ func GetSuggestions(stacks []detector.Stack) Suggestions {
 		primaryLang = stacks[0].Lang
 	}
 
-	// Consilium suggestions
-	if v, ok := architectMap[primaryLang]; ok {
-		sug.Consilium["architect"] = v
-	}
-	if frontendName != "" {
-		if v, ok := frontendMap[frontendName]; ok {
-			sug.Consilium["frontend"] = v
-		}
-	}
+	// Consilium suggestions — every role always gets a default
+	sug.Consilium["architect"] = lookupOrDefault(architectMap, primaryLang, "voltagent-lang:java-architect")
+	sug.Consilium["frontend"] = lookupOrDefault(frontendMap, frontendName, defaultFrontend)
 	sug.Consilium["ui"] = defaultUI
-	if v, ok := securityMap[primaryLang]; ok {
-		sug.Consilium["security"] = v
-	} else {
-		sug.Consilium["security"] = defaultSecurity
-	}
+	sug.Consilium["security"] = lookupOrDefault(securityMap, primaryLang, defaultSecurity)
 	sug.Consilium["devops"] = defaultDevops
 	sug.Consilium["api"] = defaultAPI
-	if v, ok := diagnosticsMap[primaryLang]; ok {
-		sug.Consilium["diagnostics"] = v
-	}
-	if v, ok := testMap[primaryLang]; ok {
-		sug.Consilium["test"] = v
-	}
+	sug.Consilium["diagnostics"] = lookupOrDefault(diagnosticsMap, primaryLang, defaultDiag)
+	sug.Consilium["test"] = lookupOrDefault(testMap, primaryLang, defaultTest)
+	sug.Consilium["mobile"] = lookupOrDefault(mobileMap, primaryLang, defaultMobile)
 
 	// Exec suggestions
 	for _, st := range stacks {
