@@ -22,138 +22,150 @@ func Pick(items []string) (string, bool) {
 
 	query := ""
 	cursor := 0
-	prevLines := 0
+	drawnLines := 0 // how many lines we drew last time (including input line)
 
-	draw := func() {
-		// Clear previous output
-		if prevLines > 0 {
-			fmt.Printf("\033[%dA", prevLines) // move up
+	redraw := func() {
+		// Move up to first drawn line and clear everything
+		if drawnLines > 1 {
+			fmt.Fprintf(os.Stdout, "\x1b[%dA", drawnLines-1)
 		}
-		for i := 0; i <= prevLines; i++ {
-			fmt.Print("\r\033[K") // clear line
-			if i < prevLines {
-				fmt.Print("\n")
+		for i := 0; i < drawnLines; i++ {
+			fmt.Fprintf(os.Stdout, "\r\x1b[2K") // clear entire line
+			if i < drawnLines-1 {
+				fmt.Fprintf(os.Stdout, "\n")
 			}
 		}
-		if prevLines > 0 {
-			fmt.Printf("\033[%dA", prevLines)
+		// Move back up to start
+		if drawnLines > 1 {
+			fmt.Fprintf(os.Stdout, "\x1b[%dA", drawnLines-1)
 		}
 
-		// Filter
-		matches := filter(items, query)
-
-		// Draw input line
-		fmt.Printf("\r\033[K  > %s", query)
-
-		// Draw matches
-		show := matches
-		if len(show) > maxVisible {
-			show = show[:maxVisible]
-		}
-		if cursor >= len(show) {
-			cursor = len(show) - 1
+		// Filter items
+		matches := filterItems(items, query)
+		if cursor >= len(matches) {
+			cursor = len(matches) - 1
 		}
 		if cursor < 0 {
 			cursor = 0
 		}
 
+		// Determine visible slice
+		show := matches
+		if len(show) > maxVisible {
+			show = show[:maxVisible]
+		}
+
+		// Draw input line
+		fmt.Fprintf(os.Stdout, "\r\x1b[2K  > %s", query)
+
+		// Draw items below
 		for i, item := range show {
-			fmt.Print("\n\033[K")
 			if i == cursor {
-				fmt.Printf("  \033[7m %s \033[0m", item) // inverted = selected
+				fmt.Fprintf(os.Stdout, "\r\n\x1b[2K  \x1b[7m %s \x1b[0m", item)
 			} else {
-				fmt.Printf("    %s", item)
+				fmt.Fprintf(os.Stdout, "\r\n\x1b[2K    %s", item)
 			}
 		}
+
+		// Show "more" indicator
+		extra := 0
 		if len(matches) > maxVisible {
-			fmt.Printf("\n\033[K    ... +%d more", len(matches)-maxVisible)
-			prevLines = len(show) + 1
-		} else {
-			prevLines = len(show)
+			fmt.Fprintf(os.Stdout, "\r\n\x1b[2K    ... +%d more", len(matches)-maxVisible)
+			extra = 1
 		}
 
-		// Move cursor back to input line
-		if prevLines > 0 {
-			fmt.Printf("\033[%dA", prevLines)
+		totalLines := 1 + len(show) + extra // input + items + maybe "more"
+
+		// Move cursor back up to input line
+		linesBelow := len(show) + extra
+		if linesBelow > 0 {
+			fmt.Fprintf(os.Stdout, "\x1b[%dA", linesBelow)
 		}
-		fmt.Printf("\r\033[%dC", len(query)+4) // position after "> query"
+		// Position cursor at end of query
+		fmt.Fprintf(os.Stdout, "\r\x1b[%dC", len(query)+4) // "  > " = 4 chars
+
+		drawnLines = totalLines
 	}
 
-	draw()
+	redraw()
 
 	buf := make([]byte, 3)
 	for {
 		n, err := os.Stdin.Read(buf)
 		if err != nil || n == 0 {
-			cleanup(prevLines)
+			clearDrawn(drawnLines)
 			return "", false
 		}
 
-		switch {
-		// Escape
-		case n == 1 && buf[0] == 27:
-			cleanup(prevLines)
-			return "", false
+		// Escape sequences (arrows, etc)
+		if n >= 1 && buf[0] == 27 {
+			if n == 1 {
+				// Plain Escape
+				clearDrawn(drawnLines)
+				return "", false
+			}
+			if n == 3 && buf[1] == 91 {
+				matches := filterItems(items, query)
+				visible := len(matches)
+				if visible > maxVisible {
+					visible = maxVisible
+				}
+				switch buf[2] {
+				case 65: // Up
+					if cursor > 0 {
+						cursor--
+					}
+				case 66: // Down
+					if cursor < visible-1 {
+						cursor++
+					}
+				}
+				redraw()
+			}
+			continue
+		}
 
+		switch {
 		// Ctrl+C
-		case n == 1 && buf[0] == 3:
-			cleanup(prevLines)
+		case buf[0] == 3:
+			clearDrawn(drawnLines)
 			return "", false
 
 		// Enter
-		case n == 1 && (buf[0] == 13 || buf[0] == 10):
-			matches := filter(items, query)
-			cleanup(prevLines)
+		case buf[0] == 13 || buf[0] == 10:
+			matches := filterItems(items, query)
+			clearDrawn(drawnLines)
 			if len(matches) > 0 && cursor < len(matches) {
 				return matches[cursor], true
 			}
 			return "", false
 
 		// Backspace
-		case n == 1 && (buf[0] == 127 || buf[0] == 8):
+		case buf[0] == 127 || buf[0] == 8:
 			if len(query) > 0 {
 				query = query[:len(query)-1]
 				cursor = 0
 			}
-			draw()
+			redraw()
 
-		// Arrow keys: ESC [ A/B
-		case n == 3 && buf[0] == 27 && buf[1] == 91:
-			matches := filter(items, query)
-			show := len(matches)
-			if show > maxVisible {
-				show = maxVisible
-			}
-			switch buf[2] {
-			case 65: // Up
-				if cursor > 0 {
-					cursor--
-				}
-			case 66: // Down
-				if cursor < show-1 {
-					cursor++
-				}
-			}
-			draw()
-
-		// Tab — autocomplete from selected
-		case n == 1 && buf[0] == 9:
-			matches := filter(items, query)
+		// Tab
+		case buf[0] == 9:
+			matches := filterItems(items, query)
+			clearDrawn(drawnLines)
 			if len(matches) > 0 && cursor < len(matches) {
-				cleanup(prevLines)
 				return matches[cursor], true
 			}
 
-		// Printable character
-		case n == 1 && buf[0] >= 32 && buf[0] < 127:
+		// Printable ASCII
+		case buf[0] >= 32 && buf[0] < 127:
 			query += string(buf[0])
 			cursor = 0
-			draw()
+			redraw()
 		}
 	}
 }
 
-func filter(items []string, query string) []string {
+func filterItems(items []string, query string) []string {
 	if query == "" {
 		return items
 	}
@@ -167,16 +179,21 @@ func filter(items []string, query string) []string {
 	return results
 }
 
-func cleanup(lines int) {
-	// Clear dropdown lines
-	for i := 0; i <= lines; i++ {
-		fmt.Print("\r\033[K")
-		if i < lines {
-			fmt.Print("\n")
+func clearDrawn(lines int) {
+	// Move to first line
+	if lines > 1 {
+		fmt.Fprintf(os.Stdout, "\x1b[%dA", lines-1)
+	}
+	// Clear all lines
+	for i := 0; i < lines; i++ {
+		fmt.Fprintf(os.Stdout, "\r\x1b[2K")
+		if i < lines-1 {
+			fmt.Fprintf(os.Stdout, "\n")
 		}
 	}
-	if lines > 0 {
-		fmt.Printf("\033[%dA", lines)
+	// Move back to first line
+	if lines > 1 {
+		fmt.Fprintf(os.Stdout, "\x1b[%dA", lines-1)
 	}
-	fmt.Print("\r\033[K")
+	fmt.Fprintf(os.Stdout, "\r\x1b[2K")
 }
