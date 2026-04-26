@@ -204,6 +204,8 @@ func Create(name string, r *bufio.Reader) error {
 
 	fmt.Printf("\nCreating profile: %s\n", name)
 
+	allRoles := []string{"architect", "frontend", "ui", "security", "devops", "api", "diagnostics", "test"}
+
 	var stages []stage
 
 	for i := 1; ; i++ {
@@ -221,6 +223,7 @@ func Create(name string, r *bufio.Reader) error {
 
 		switch agentType {
 		case "consilium":
+			fmt.Printf("Available roles: %s\n", strings.Join(allRoles, ", "))
 			rolesStr := prompt(r, "Roles (comma-separated)")
 			for _, role := range strings.Split(rolesStr, ",") {
 				role = strings.TrimSpace(role)
@@ -229,12 +232,20 @@ func Create(name string, r *bufio.Reader) error {
 				}
 			}
 		case "single":
-			s.AgentName = prompt(r, "Agent name (Enter for 'general-purpose')")
-			if s.AgentName == "" {
-				s.AgentName = "general-purpose"
+			fmt.Printf("Available roles: %s\n", strings.Join(allRoles, ", "))
+			s.Role = prompt(r, "Role (or Enter for 'general-purpose')")
+			if s.Role == "" {
+				s.Role = "general-purpose"
 			}
 		}
 
+		if len(stages) > 0 {
+			existing := make([]string, len(stages))
+			for j, st := range stages {
+				existing[j] = st.Name
+			}
+			fmt.Printf("Existing stages: %s\n", strings.Join(existing, ", "))
+		}
 		transStr := prompt(r, fmt.Sprintf("After %s, allowed transitions (comma-separated stage names)", sName))
 		for _, t := range strings.Split(transStr, ",") {
 			t = strings.TrimSpace(t)
@@ -281,8 +292,8 @@ func Create(name string, r *bufio.Reader) error {
 type stage struct {
 	Name        string
 	AgentType   string
-	AgentName   string
-	Roles       []string
+	Role        string   // for single
+	Roles       []string // for consilium
 	Transitions []string
 }
 
@@ -341,7 +352,7 @@ func stageDescription(s stage) string {
 	case "bash":
 		return "bash execution"
 	case "single":
-		return s.AgentName
+		return s.Role
 	case "none":
 		return "terminal stage"
 	default:
@@ -356,7 +367,7 @@ func stageAgentInfo(s stage) (string, string) {
 	case "bash":
 		return "Bash", "sonnet"
 	case "single":
-		return s.AgentName, "opus"
+		return s.Role, "opus"
 	case "none":
 		return "—", "—"
 	default:
