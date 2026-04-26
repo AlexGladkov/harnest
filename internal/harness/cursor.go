@@ -28,6 +28,9 @@ func (g *CursorGenerator) Generate(projectDir string, stacks []detector.Stack, a
 	b.WriteString("## Expert Roles\n")
 	b.WriteString("When analyzing code, consider these perspectives:\n\n")
 	for _, c := range agents.Consilium {
+		if c.Agent == "" {
+			continue
+		}
 		b.WriteString(fmt.Sprintf("- **%s**: %s\n", c.Role, describeRole(c.Role)))
 	}
 	b.WriteString("\n")
@@ -36,6 +39,9 @@ func (g *CursorGenerator) Generate(projectDir string, stacks []detector.Stack, a
 	b.WriteString("## File Ownership\n")
 	b.WriteString("Match code style and patterns for each area:\n\n")
 	for _, e := range agents.Exec {
+		if e.Agent == "" {
+			continue
+		}
 		b.WriteString(fmt.Sprintf("- `%s` → %s patterns\n", e.Scope, e.Agent))
 	}
 	b.WriteString("\n")

@@ -10,11 +10,13 @@ import (
 	"github.com/AlexGladkov/harnest/internal/converter"
 	"github.com/AlexGladkov/harnest/internal/detector"
 	"github.com/AlexGladkov/harnest/internal/harness"
+	"github.com/AlexGladkov/harnest/internal/install"
 	"github.com/AlexGladkov/harnest/internal/mapping"
 	"github.com/AlexGladkov/harnest/internal/profile"
+	"github.com/AlexGladkov/harnest/internal/wizard"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -23,6 +25,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "install":
+		runInstall()
 	case "init":
 		runInit()
 	case "detect":
@@ -46,6 +50,20 @@ func main() {
 	}
 }
 
+// --- install ---
+
+func runInstall() {
+	fmt.Println("Installing Harnest framework...")
+	if err := install.InstallAll(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("\nDone. Installed:")
+	fmt.Println("  - 6 workflow profiles → ~/.claude/profiles/")
+	fmt.Println("  - global CLAUDE.md    → ~/.claude/CLAUDE.md")
+	fmt.Println("\nNext: cd <project> && harnest init")
+}
+
 // --- detect ---
 
 func runDetect() {
@@ -66,7 +84,7 @@ func runDetect() {
 func runInit() {
 	dir := parseDirArg(2)
 	harnessName := parseFlag("--harness", "")
-	interactive := harnessName == ""
+	nonInteractive := hasFlag("--non-interactive")
 
 	stacks := detector.Detect(dir)
 	if len(stacks) == 0 {
@@ -78,34 +96,24 @@ func runInit() {
 		}
 	}
 
-	// Interactive harness selection
-	if interactive {
-		fmt.Println("\nTarget harness:")
-		options := []string{"claude-code", "cursor", "windsurf"}
-		for i, o := range options {
-			marker := "  "
-			if i == 0 {
-				marker = ">"
-			}
-			fmt.Printf("  %s %d) %s\n", marker, i+1, o)
-		}
-		fmt.Print("\nSelect [1]: ")
-		reader := bufio.NewReader(os.Stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		switch input {
-		case "", "1":
+	// Harness selection
+	if harnessName == "" {
+		if nonInteractive {
 			harnessName = "claude-code"
-		case "2":
-			harnessName = "cursor"
-		case "3":
-			harnessName = "windsurf"
-		default:
-			harnessName = input
+		} else {
+			harnessName = selectHarness()
 		}
 	}
 
-	agents := mapping.Resolve(stacks)
+	// Agent selection
+	var agents mapping.AgentConfig
+	if nonInteractive {
+		agents = mapping.Resolve(stacks)
+	} else {
+		structure := mapping.ResolveStructure(stacks)
+		suggestions := mapping.GetSuggestions(stacks)
+		agents = wizard.Run(os.Stdin, structure, suggestions)
+	}
 
 	gen, err := harness.Get(harnessName)
 	if err != nil {
@@ -124,6 +132,32 @@ func runInit() {
 	fmt.Printf("  Exec agents: %d\n", len(agents.Exec))
 }
 
+func selectHarness() string {
+	fmt.Println("\nTarget harness:")
+	options := []string{"claude-code", "cursor", "windsurf"}
+	for i, o := range options {
+		marker := "  "
+		if i == 0 {
+			marker = ">"
+		}
+		fmt.Printf("  %s %d) %s\n", marker, i+1, o)
+	}
+	fmt.Print("\nSelect [1]: ")
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	switch input {
+	case "", "1":
+		return "claude-code"
+	case "2":
+		return "cursor"
+	case "3":
+		return "windsurf"
+	default:
+		return input
+	}
+}
+
 // --- profiles ---
 
 func runProfiles() {
@@ -140,8 +174,7 @@ func runProfiles() {
 			os.Exit(1)
 		}
 		if len(profiles) == 0 {
-			fmt.Println("No profiles installed. Run: harnest profiles add <name>")
-			fmt.Println("\nAvailable: business-feature, bug-hunting, research, refactoring, e2e-testing, e2e-authoring")
+			fmt.Println("No profiles installed. Run: harnest install")
 			return
 		}
 		fmt.Println("Installed profiles:")
@@ -197,7 +230,7 @@ func runAgents() {
 		cfg, err := config.ReadProject(dir)
 		if err != nil {
 			// No project config — show what would be generated
-			fmt.Println("No project config found. Showing defaults from detection:")
+			fmt.Println("No project config found. Showing suggestions from detection:")
 			stacks := detector.Detect(dir)
 			agents := mapping.Resolve(stacks)
 			printAgentConfig(agents)
@@ -288,7 +321,10 @@ func parseDirArg(startIdx int) string {
 	for i := startIdx; i < len(os.Args); i++ {
 		arg := os.Args[i]
 		if strings.HasPrefix(arg, "-") {
-			// skip flag + its value
+			// skip flag + its value (unless it's a boolean flag)
+			if arg == "--non-interactive" {
+				continue
+			}
 			i++
 			continue
 		}
@@ -311,6 +347,15 @@ func parseFlag(flag, defaultVal string) string {
 	return defaultVal
 }
 
+func hasFlag(flag string) bool {
+	for _, arg := range os.Args {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
+}
+
 func isSubcommand(s string) bool {
 	subs := []string{"list", "add", "remove", "set"}
 	for _, sub := range subs {
@@ -325,7 +370,8 @@ func printUsage() {
 	fmt.Println(`harnest - AI coding assistant configurator
 
 Usage:
-  harnest init [dir] [--harness claude-code|cursor|windsurf]
+  harnest install
+  harnest init [dir] [--harness claude-code|cursor|windsurf] [--non-interactive]
   harnest detect [dir]
   harnest profiles list
   harnest profiles add <name> [--dest dir]
@@ -337,10 +383,15 @@ Usage:
   harnest version
 
 Commands:
-  init       Detect stack and generate AI assistant config
+  install    Install Harnest framework (profiles + global CLAUDE.md)
+  init       Detect stack and generate project config with agent wizard
   detect     Show detected stack without generating
   profiles   Manage workflow profiles (business-feature, bug-hunting, etc.)
   agents     View/modify agent role mappings
   convert    Convert config between AI assistants
-  update     Update agent mappings and profiles`)
+  update     Update agent mappings and profiles
+
+Flags:
+  --harness          Target harness (claude-code, cursor, windsurf)
+  --non-interactive  Use suggested agents without wizard (for CI/scripts)`)
 }

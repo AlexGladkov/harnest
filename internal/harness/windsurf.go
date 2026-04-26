@@ -25,6 +25,9 @@ func (g *WindsurfGenerator) Generate(projectDir string, stacks []detector.Stack,
 
 	b.WriteString("## Code Areas\n")
 	for _, e := range agents.Exec {
+		if e.Agent == "" {
+			continue
+		}
 		b.WriteString(fmt.Sprintf("- `%s`: follow %s conventions\n", e.Scope, agentToStyle(e.Agent)))
 	}
 	b.WriteString("\n")

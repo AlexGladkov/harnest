@@ -147,6 +147,96 @@ func Resolve(stacks []detector.Stack) AgentConfig {
 	return config
 }
 
+// --- Structure + Suggestions API (v0.2.0) ---
+
+type AgentStructure struct {
+	Roles      []string
+	ExecScopes []ExecScope
+}
+
+type ExecScope struct {
+	StackName string // "spring-boot" — display in wizard
+	Scope     string // "backend/**/*.kt"
+}
+
+type Suggestions struct {
+	Consilium map[string]string // role -> suggested agent
+	Exec      map[string]string // stackName -> suggested agent
+}
+
+func ResolveStructure(stacks []detector.Stack) AgentStructure {
+	s := AgentStructure{}
+
+	// Always include all 8 roles
+	s.Roles = []string{"architect", "frontend", "ui", "security", "devops", "api", "diagnostics", "test"}
+
+	// Exec scopes from detected stacks
+	for _, st := range stacks {
+		if ea, ok := execMap[st.Name]; ok {
+			s.ExecScopes = append(s.ExecScopes, ExecScope{
+				StackName: st.Name,
+				Scope:     ea.Scope,
+			})
+		}
+	}
+
+	return s
+}
+
+func GetSuggestions(stacks []detector.Stack) Suggestions {
+	sug := Suggestions{
+		Consilium: make(map[string]string),
+		Exec:      make(map[string]string),
+	}
+
+	primaryLang := ""
+	frontendName := ""
+	for _, s := range stacks {
+		if s.Category == "backend" && primaryLang == "" {
+			primaryLang = s.Lang
+		}
+		if s.Category == "frontend" || s.Category == "shared" {
+			frontendName = s.Name
+		}
+	}
+	if primaryLang == "" && len(stacks) > 0 {
+		primaryLang = stacks[0].Lang
+	}
+
+	// Consilium suggestions
+	if v, ok := architectMap[primaryLang]; ok {
+		sug.Consilium["architect"] = v
+	}
+	if frontendName != "" {
+		if v, ok := frontendMap[frontendName]; ok {
+			sug.Consilium["frontend"] = v
+		}
+	}
+	sug.Consilium["ui"] = defaultUI
+	if v, ok := securityMap[primaryLang]; ok {
+		sug.Consilium["security"] = v
+	} else {
+		sug.Consilium["security"] = defaultSecurity
+	}
+	sug.Consilium["devops"] = defaultDevops
+	sug.Consilium["api"] = defaultAPI
+	if v, ok := diagnosticsMap[primaryLang]; ok {
+		sug.Consilium["diagnostics"] = v
+	}
+	if v, ok := testMap[primaryLang]; ok {
+		sug.Consilium["test"] = v
+	}
+
+	// Exec suggestions
+	for _, st := range stacks {
+		if ea, ok := execMap[st.Name]; ok {
+			sug.Exec[st.Name] = ea.Agent
+		}
+	}
+
+	return sug
+}
+
 func lookupOrDefault(m map[string]string, key, fallback string) string {
 	if v, ok := m[key]; ok {
 		return v

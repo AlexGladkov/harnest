@@ -34,6 +34,9 @@ func (g *ClaudeCodeGenerator) Generate(projectDir string, stacks []detector.Stac
 	b.WriteString("| Role | Agent |\n")
 	b.WriteString("|------|-------|\n")
 	for _, c := range agents.Consilium {
+		if c.Agent == "" {
+			continue
+		}
 		b.WriteString(fmt.Sprintf("| %s | %s |\n", c.Role, c.Agent))
 	}
 	b.WriteString("\n")
@@ -43,6 +46,9 @@ func (g *ClaudeCodeGenerator) Generate(projectDir string, stacks []detector.Stac
 	b.WriteString("| Agent | Scope |\n")
 	b.WriteString("|-------|-------|\n")
 	for _, e := range agents.Exec {
+		if e.Agent == "" {
+			continue
+		}
 		b.WriteString(fmt.Sprintf("| %s | %s |\n", e.Agent, e.Scope))
 	}
 	b.WriteString("\n")
