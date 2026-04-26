@@ -10,6 +10,8 @@ import (
 	"github.com/AlexGladkov/harnest/internal/mapping"
 )
 
+const maxShow = 5
+
 func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Suggestions) mapping.AgentConfig {
 	scanner := bufio.NewScanner(r)
 	config := mapping.AgentConfig{}
@@ -20,7 +22,6 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 	fmt.Printf("Found %d agents on this machine\n", len(available))
 	fmt.Println("Enter = accept suggestion, s = skip, ? = search\n")
 
-	// Consilium roles
 	for _, role := range structure.Roles {
 		suggestion := suggestions.Consilium[role]
 		agent := pickAgent(scanner, fmt.Sprintf("Consilium: %s", role), suggestion, available)
@@ -32,7 +33,6 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 		}
 	}
 
-	// Exec scopes
 	if len(structure.ExecScopes) > 0 {
 		fmt.Println()
 	}
@@ -52,10 +52,12 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 }
 
 func pickAgent(scanner *bufio.Scanner, label, suggestion string, available []string) string {
+	fmt.Printf("[%s]\n", label)
 	if suggestion != "" {
-		fmt.Printf("[%s]\n  Suggestion: %s\n  (Enter=accept, s=skip, ?=search): ", label, suggestion)
+		fmt.Printf("  Suggestion: %s\n", suggestion)
+		fmt.Print("  Enter=accept, s=skip, ?=search: ")
 	} else {
-		fmt.Printf("[%s]\n  (s=skip, ?=search): ", label)
+		fmt.Print("  s=skip, ?=search: ")
 	}
 
 	if !scanner.Scan() {
@@ -69,14 +71,8 @@ func pickAgent(scanner *bufio.Scanner, label, suggestion string, available []str
 	case input == "" && suggestion != "":
 		return suggestion
 	case input == "?":
-		picked, ok := Pick(available)
-		if ok {
-			fmt.Printf("  → %s\n", picked)
-			return picked
-		}
-		return ""
+		return searchLoop(scanner, available)
 	default:
-		// Exact match
 		for _, a := range available {
 			if a == input {
 				return input
@@ -87,5 +83,112 @@ func pickAgent(scanner *bufio.Scanner, label, suggestion string, available []str
 			return input
 		}
 		return ""
+	}
+}
+
+func searchLoop(scanner *bufio.Scanner, available []string) string {
+	// Show initial top
+	showResults(available, "")
+	fmt.Print("  Type to filter: ")
+
+	for {
+		if !scanner.Scan() {
+			return ""
+		}
+		input := strings.TrimSpace(scanner.Text())
+
+		if input == "" {
+			return "" // cancel
+		}
+
+		// Try as number from last shown results
+		results := agents.Search(available, "")
+		// We need to re-filter with whatever was shown last
+		// But since we don't track state, treat input as search query first
+
+		// Check exact match
+		for _, a := range available {
+			if a == input {
+				fmt.Printf("  → %s\n", a)
+				return a
+			}
+		}
+
+		// Filter
+		results = agents.Search(available, input)
+
+		if len(results) == 0 {
+			fmt.Printf("  No match for '%s'\n", input)
+			fmt.Print("  Try again or Enter to cancel: ")
+			continue
+		}
+
+		if len(results) == 1 {
+			fmt.Printf("  → %s\n", results[0])
+			return results[0]
+		}
+
+		// Show filtered results
+		showResults(results, input)
+		fmt.Print("  Pick #, refine, or Enter to cancel: ")
+
+		if !scanner.Scan() {
+			return ""
+		}
+		pick := strings.TrimSpace(scanner.Text())
+
+		if pick == "" {
+			return ""
+		}
+
+		// Try as number
+		idx := 0
+		show := results
+		if len(show) > maxShow {
+			show = show[:maxShow]
+		}
+		if _, err := fmt.Sscanf(pick, "%d", &idx); err == nil && idx >= 1 && idx <= len(show) {
+			fmt.Printf("  → %s\n", show[idx-1])
+			return show[idx-1]
+		}
+
+		// Exact match
+		for _, a := range available {
+			if a == pick {
+				fmt.Printf("  → %s\n", a)
+				return a
+			}
+		}
+
+		// Treat as refined search
+		results = agents.Search(available, pick)
+		if len(results) == 1 {
+			fmt.Printf("  → %s\n", results[0])
+			return results[0]
+		}
+		if len(results) == 0 {
+			fmt.Printf("  No match for '%s'\n", pick)
+			fmt.Print("  Try again or Enter to cancel: ")
+			continue
+		}
+
+		showResults(results, pick)
+		fmt.Print("  Pick #, refine, or Enter to cancel: ")
+	}
+}
+
+func showResults(items []string, query string) {
+	show := items
+	if len(show) > maxShow {
+		show = show[:maxShow]
+	}
+	if query != "" {
+		fmt.Printf("  '%s' → %d matches:\n", query, len(items))
+	}
+	for i, a := range show {
+		fmt.Printf("    %d) %s\n", i+1, a)
+	}
+	if len(items) > maxShow {
+		fmt.Printf("    ... +%d more\n", len(items)-maxShow)
 	}
 }
