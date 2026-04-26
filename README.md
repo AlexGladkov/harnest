@@ -126,7 +126,7 @@ Harnest generates configs based on a **three-layer system** that separates conce
 
 ### Three Layers
 
-![Three layers of the system](docs/layers.png)
+![Three layers of the system](docs/layers.jpg)
 
 **Layer 1 — Global CLAUDE.md** (`~/.claude/CLAUDE.md`):
 - Routes user requests to the right workflow profile
@@ -150,7 +150,7 @@ This separation means **one profile works for any project**. The same `business-
 
 ### Request Flow
 
-![Request processing flow](docs/flow.png)
+![Request processing flow](docs/flow.jpg)
 
 When a user sends a request like "add Share button to iOS and Android":
 
