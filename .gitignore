@@ -2,3 +2,5 @@
 dist/
 *.generated.md
 .DS_Store
+harnest-darwin-*
+harnest-linux-*
