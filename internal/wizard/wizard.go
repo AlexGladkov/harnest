@@ -87,8 +87,6 @@ func pickAgent(scanner *bufio.Scanner, label, suggestion string, available []str
 }
 
 func searchLoop(scanner *bufio.Scanner, available []string) string {
-	// Show initial top
-	showResults(available, "")
 	fmt.Print("  Type to filter: ")
 
 	for {

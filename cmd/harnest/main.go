@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/AlexGladkov/harnest/internal/config"
@@ -16,7 +17,7 @@ import (
 	"github.com/AlexGladkov/harnest/internal/wizard"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -134,7 +135,7 @@ func runInit() {
 
 func selectHarness() string {
 	fmt.Println("\nTarget harness:")
-	options := []string{"claude-code", "cursor", "windsurf"}
+	options := harness.Names()
 	for i, o := range options {
 		marker := "  "
 		if i == 0 {
@@ -146,16 +147,14 @@ func selectHarness() string {
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
-	switch input {
-	case "", "1":
-		return "claude-code"
-	case "2":
-		return "cursor"
-	case "3":
-		return "windsurf"
-	default:
-		return input
+
+	if input == "" {
+		return options[0]
 	}
+	if idx, err := strconv.Atoi(input); err == nil && idx >= 1 && idx <= len(options) {
+		return options[idx-1]
+	}
+	return input
 }
 
 // --- profiles ---
@@ -379,11 +378,12 @@ func isSubcommand(s string) bool {
 }
 
 func printUsage() {
-	fmt.Println(`harnest - AI coding assistant configurator
+	hlist := strings.Join(harness.Names(), "|")
+	fmt.Printf(`harnest - AI coding assistant configurator
 
 Usage:
   harnest install
-  harnest init [dir] [--harness claude-code|cursor|windsurf] [--non-interactive]
+  harnest init [dir] [--harness %s] [--non-interactive]
   harnest detect [dir]
   harnest profiles list
   harnest profiles add <name>
@@ -405,6 +405,7 @@ Commands:
   update     Update agent mappings and profiles
 
 Flags:
-  --harness          Target harness (claude-code, cursor, windsurf)
-  --non-interactive  Use suggested agents without wizard (for CI/scripts)`)
+  --harness          Target harness (%s)
+  --non-interactive  Use suggested agents without wizard (for CI/scripts)
+`, hlist, hlist)
 }

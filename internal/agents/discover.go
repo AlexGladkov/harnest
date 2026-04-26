@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/AlexGladkov/harnest/internal/harness"
 )
 
 // Discover scans all installed agents from known locations.
@@ -23,10 +25,10 @@ func Discover() []string {
 		return nil
 	}
 
-	// 1. Custom agents: ~/.claude/agents/*.md
-	scanFlat(filepath.Join(home, ".claude", "agents"), "", add)
-	scanFlat(filepath.Join(home, ".cursor", "agents"), "", add)
-	scanFlat(filepath.Join(home, ".windsurf", "agents"), "", add)
+	// 1. Custom agents from all registered harness locations
+	for _, dir := range harness.AgentDirs() {
+		scanFlat(filepath.Join(home, dir), "", add)
+	}
 
 	// 2. All plugins: walk ~/.claude/plugins/cache/ for plugin.json with "agents" field
 	pluginsDir := filepath.Join(home, ".claude", "plugins", "cache")
