@@ -1,6 +1,6 @@
 # Harnest
 
-AI coding assistant configurator. Detects your project stack, runs an interactive agent wizard, and generates configs for Claude Code, Cursor, and Windsurf.
+AI coding assistant configurator. Detects your project stack, runs an interactive agent wizard, and generates configs for Claude Code, Cursor, Windsurf, Codex, OpenCode, and Qwen Code.
 
 ## About
 
@@ -22,6 +22,12 @@ Harnest solves this with a three-layer system:
 ```bash
 brew tap AlexGladkov/tap
 brew install harnest
+```
+
+Or with npm:
+
+```bash
+npm install -g harnest
 ```
 
 Or with Go:
@@ -165,6 +171,9 @@ Installed to `~/.claude/profiles/`. Each profile defines stages and roles — no
 | Claude Code | `CLAUDE.md` | Full consilium + exec scope + profiles |
 | Cursor | `.cursorrules` | Expert roles + file ownership |
 | Windsurf | `.windsurfrules` | Stack context + code areas |
+| Codex | `AGENTS.md` | Expert perspectives + file ownership |
+| OpenCode | `opencode.json` | Subagent declarations + agent files |
+| Qwen Code | `QWEN.md` | Expert perspectives + file ownership |
 
 ## License
 

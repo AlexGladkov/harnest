@@ -1,0 +1,45 @@
+{
+  "name": "harnest",
+  "version": "0.5.0",
+  "description": "AI coding assistant configurator — generate configs for Claude Code, Cursor, Windsurf, Codex, OpenCode, and Qwen Code",
+  "license": "CC-BY-NC-4.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexGladkov/harnest"
+  },
+  "homepage": "https://github.com/AlexGladkov/harnest",
+  "keywords": [
+    "ai",
+    "coding-assistant",
+    "claude-code",
+    "cursor",
+    "windsurf",
+    "codex",
+    "opencode",
+    "qwen-code",
+    "configurator"
+  ],
+  "bin": {
+    "harnest": "bin/harnest"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "bin/",
+    "install.js",
+    "package.json",
+    "README.md"
+  ],
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}

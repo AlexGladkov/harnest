@@ -27,6 +27,7 @@ var registry = map[string]HarnessInfo{
 	"windsurf":    {Generator: &WindsurfGenerator{}, AgentDir: ".windsurf/agents"},
 	"codex":       {Generator: &CodexGenerator{}, AgentDir: ".codex/agents"},
 	"opencode":    {Generator: &OpenCodeGenerator{}, AgentDir: ".config/opencode/agents"},
+	"qwen-code":   {Generator: &QwenCodeGenerator{}, AgentDir: ".qwen/agents"},
 }
 
 func Get(name string) (Generator, error) {
