@@ -25,19 +25,55 @@ type ExecAgent struct {
 
 var architectMap = map[string]string{
 	"kotlin":     "voltagent-lang:java-architect",
+	"java":       "voltagent-lang:java-architect",
+	"scala":      "voltagent-lang:java-architect",
+	"groovy":     "voltagent-lang:java-architect",
+	"clojure":    "voltagent-lang:java-architect",
 	"swift":      "voltagent-lang:swift-expert",
 	"python":     "voltagent-lang:python-pro",
 	"typescript": "voltagent-lang:typescript-pro",
 	"go":         "voltagent-lang:golang-pro",
 	"rust":       "voltagent-lang:rust-engineer",
 	"dart":       "voltagent-lang:flutter-expert",
+	"ruby":       "voltagent-lang:rails-expert",
+	"php":        "voltagent-lang:php-pro",
+	"csharp":     "voltagent-lang:dotnet-core-expert",
+	"elixir":     "voltagent-lang:elixir-expert",
+	"erlang":     "voltagent-lang:elixir-expert",
+	"gleam":      "voltagent-lang:elixir-expert",
+	"haskell":    "voltagent-lang:elixir-expert",
+	"ocaml":      "voltagent-lang:elixir-expert",
+	"c":          "voltagent-lang:cpp-pro",
+	"cpp":        "voltagent-lang:cpp-pro",
+	"zig":        "voltagent-lang:cpp-pro",
+	"nim":        "voltagent-lang:python-pro",
+	"vlang":      "voltagent-lang:golang-pro",
+	"crystal":    "voltagent-lang:ruby-pro",
+	"julia":      "voltagent-lang:python-pro",
+	"r":          "voltagent-lang:python-pro",
+	"lua":        "voltagent-lang:javascript-pro",
+	"perl":       "voltagent-lang:python-pro",
+	"hcl":        "voltagent-infra:terraform-engineer",
+	"yaml":       "voltagent-infra:devops-engineer",
 }
 
 var frontendMap = map[string]string{
 	"vue":       "voltagent-lang:vue-expert",
+	"nuxt":      "voltagent-lang:vue-expert",
 	"react":     "voltagent-lang:react-specialist",
 	"nextjs":    "voltagent-lang:nextjs-developer",
+	"gatsby":    "voltagent-lang:react-specialist",
+	"remix":     "voltagent-lang:react-specialist",
 	"angular":   "voltagent-lang:angular-architect",
+	"svelte":    "voltagent-lang:javascript-pro",
+	"sveltekit": "voltagent-lang:javascript-pro",
+	"solid":     "voltagent-lang:javascript-pro",
+	"qwik":      "voltagent-lang:javascript-pro",
+	"astro":     "voltagent-lang:javascript-pro",
+	"ember":     "voltagent-lang:javascript-pro",
+	"eleventy":  "voltagent-lang:javascript-pro",
+	"hugo":      "voltagent-lang:golang-pro",
+	"jekyll":    "voltagent-lang:rails-expert",
 	"flutter":   "voltagent-lang:flutter-expert",
 	"swiftui":   "voltagent-lang:swift-expert",
 }
@@ -65,22 +101,143 @@ var testMap = map[string]string{
 }
 
 var execMap = map[string]ExecAgent{
+	// --- Kotlin ---
 	"spring-boot":           {Agent: "builder-spring-feature", Scope: "backend/**/*.kt"},
+	"ktor":                  {Agent: "voltagent-lang:kotlin-specialist", Scope: "backend/**/*.kt"},
+	"quarkus":               {Agent: "voltagent-lang:spring-boot-engineer", Scope: "src/**/*.kt"},
+	"micronaut":             {Agent: "voltagent-lang:spring-boot-engineer", Scope: "src/**/*.kt"},
 	"compose-multiplatform": {Agent: "kotlin-multiplatform-developer", Scope: "composeApp/**/*.kt"},
 	"android":               {Agent: "kotlin-multiplatform-developer", Scope: "app/**/*.kt"},
-	"ios-native":            {Agent: "voltagent-lang:swift-expert", Scope: "iosApp/**/*.swift"},
-	"swift-package":         {Agent: "voltagent-lang:swift-expert", Scope: "**/*.swift"},
-	"vue":                   {Agent: "voltagent-lang:vue-expert", Scope: "vue-frontend/**"},
-	"react":                 {Agent: "voltagent-lang:react-specialist", Scope: "frontend/**/*.tsx"},
-	"nextjs":                {Agent: "voltagent-lang:nextjs-developer", Scope: "**/*.tsx"},
-	"angular":               {Agent: "voltagent-lang:angular-architect", Scope: "src/**/*.ts"},
-	"node":                  {Agent: "voltagent-lang:node-specialist", Scope: "server/**/*.ts"},
-	"fastapi":               {Agent: "voltagent-lang:fastapi-developer", Scope: "**/*.py"},
-	"django":                {Agent: "voltagent-lang:django-developer", Scope: "**/*.py"},
-	"flask":                 {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
-	"go":                    {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
-	"rust":                  {Agent: "voltagent-lang:rust-engineer", Scope: "**/*.rs"},
-	"flutter":               {Agent: "voltagent-lang:flutter-expert", Scope: "lib/**/*.dart"},
+
+	// --- Java ---
+	"spring-boot-java": {Agent: "voltagent-lang:spring-boot-engineer", Scope: "src/**/*.java"},
+	"java":             {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.java"},
+
+	// --- Swift ---
+	"ios-native":    {Agent: "voltagent-lang:swift-expert", Scope: "iosApp/**/*.swift"},
+	"swift-package": {Agent: "voltagent-lang:swift-expert", Scope: "**/*.swift"},
+	"vapor":         {Agent: "voltagent-lang:swift-expert", Scope: "Sources/**/*.swift"},
+
+	// --- JS/TS Frontend ---
+	"vue":       {Agent: "voltagent-lang:vue-expert", Scope: "src/**/*.vue"},
+	"nuxt":      {Agent: "voltagent-lang:vue-expert", Scope: "src/**/*.vue"},
+	"react":     {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
+	"nextjs":    {Agent: "voltagent-lang:nextjs-developer", Scope: "src/**/*.tsx"},
+	"gatsby":    {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
+	"remix":     {Agent: "voltagent-lang:react-specialist", Scope: "app/**/*.tsx"},
+	"angular":   {Agent: "voltagent-lang:angular-architect", Scope: "src/**/*.ts"},
+	"svelte":    {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.svelte"},
+	"sveltekit": {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.svelte"},
+	"solid":     {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.tsx"},
+	"qwik":      {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.tsx"},
+	"astro":     {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.astro"},
+	"ember":     {Agent: "voltagent-lang:javascript-pro", Scope: "app/**/*.js"},
+	"eleventy":  {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.njk"},
+
+	// --- JS/TS Backend ---
+	"node":   {Agent: "voltagent-lang:node-specialist", Scope: "src/**/*.ts"},
+	"deno":   {Agent: "voltagent-lang:typescript-pro", Scope: "**/*.ts"},
+	"bun":    {Agent: "voltagent-lang:typescript-pro", Scope: "**/*.ts"},
+	"strapi": {Agent: "voltagent-lang:node-specialist", Scope: "src/**/*.js"},
+
+	// --- JS/TS Mobile ---
+	"expo":         {Agent: "voltagent-lang:expo-react-native-expert", Scope: "src/**/*.tsx"},
+	"react-native": {Agent: "voltagent-lang:expo-react-native-expert", Scope: "src/**/*.tsx"},
+	"ionic":        {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
+	"capacitor":    {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
+
+	// --- JS/TS Desktop ---
+	"electron": {Agent: "voltagent-core-dev:electron-pro", Scope: "src/**/*.ts"},
+	"tauri":    {Agent: "voltagent-lang:rust-engineer", Scope: "src-tauri/**/*.rs"},
+
+	// --- Python ---
+	"fastapi":   {Agent: "voltagent-lang:fastapi-developer", Scope: "**/*.py"},
+	"django":    {Agent: "voltagent-lang:django-developer", Scope: "**/*.py"},
+	"flask":     {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
+	"starlette": {Agent: "voltagent-lang:fastapi-developer", Scope: "**/*.py"},
+	"pyramid":   {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
+	"litestar":  {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
+	"streamlit": {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
+	"gradio":    {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
+	"jupyter":   {Agent: "voltagent-lang:python-pro", Scope: "**/*.ipynb"},
+
+	// --- Go ---
+	"go":      {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
+	"gin":     {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
+	"fiber":   {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
+	"echo":    {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
+	"chi":     {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
+	"buffalo": {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
+
+	// --- Rust ---
+	"rust":   {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
+	"axum":   {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
+	"actix":  {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
+	"rocket": {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
+	"warp":   {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
+
+	// --- Dart ---
+	"flutter": {Agent: "voltagent-lang:flutter-expert", Scope: "lib/**/*.dart"},
+
+	// --- Ruby ---
+	"rails":   {Agent: "voltagent-lang:rails-expert", Scope: "app/**/*.rb"},
+	"sinatra": {Agent: "voltagent-lang:rails-expert", Scope: "**/*.rb"},
+	"jekyll":  {Agent: "voltagent-lang:rails-expert", Scope: "**/*.rb"},
+
+	// --- PHP ---
+	"laravel":   {Agent: "voltagent-lang:laravel-specialist", Scope: "app/**/*.php"},
+	"symfony":   {Agent: "voltagent-lang:symfony-specialist", Scope: "src/**/*.php"},
+	"wordpress": {Agent: "voltagent-lang:php-pro", Scope: "**/*.php"},
+
+	// --- C# / .NET ---
+	"dotnet": {Agent: "voltagent-lang:dotnet-core-expert", Scope: "**/*.cs"},
+	"maui":   {Agent: "voltagent-lang:dotnet-core-expert", Scope: "**/*.cs"},
+
+	// --- Elixir / Erlang / BEAM ---
+	"phoenix": {Agent: "voltagent-lang:elixir-expert", Scope: "lib/**/*.ex"},
+	"elixir":  {Agent: "voltagent-lang:elixir-expert", Scope: "lib/**/*.ex"},
+	"erlang":  {Agent: "voltagent-lang:elixir-expert", Scope: "src/**/*.erl"},
+	"gleam":   {Agent: "voltagent-lang:elixir-expert", Scope: "src/**/*.gleam"},
+
+	// --- JVM (non-Java/Kotlin) ---
+	"scala":   {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.scala"},
+	"play":    {Agent: "voltagent-lang:java-architect", Scope: "app/**/*.scala"},
+	"akka":    {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.scala"},
+	"clojure": {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.clj"},
+	"grails":  {Agent: "voltagent-lang:java-architect", Scope: "grails-app/**/*.groovy"},
+
+	// --- C / C++ ---
+	"c":   {Agent: "voltagent-lang:cpp-pro", Scope: "src/**/*.c"},
+	"cpp": {Agent: "voltagent-lang:cpp-pro", Scope: "src/**/*.cpp"},
+
+	// --- Systems / Emerging ---
+	"zig":     {Agent: "voltagent-lang:cpp-pro", Scope: "src/**/*.zig"},
+	"nim":     {Agent: "voltagent-lang:python-pro", Scope: "src/**/*.nim"},
+	"vlang":   {Agent: "voltagent-lang:golang-pro", Scope: "src/**/*.v"},
+	"crystal": {Agent: "voltagent-lang:rails-expert", Scope: "src/**/*.cr"},
+
+	// --- Functional ---
+	"haskell": {Agent: "voltagent-lang:elixir-expert", Scope: "src/**/*.hs"},
+	"ocaml":   {Agent: "voltagent-lang:elixir-expert", Scope: "lib/**/*.ml"},
+
+	// --- Scientific / Data ---
+	"julia": {Agent: "voltagent-lang:python-pro", Scope: "src/**/*.jl"},
+	"r":     {Agent: "voltagent-lang:python-pro", Scope: "R/**/*.R"},
+
+	// --- Scripting ---
+	"lua":  {Agent: "voltagent-lang:javascript-pro", Scope: "**/*.lua"},
+	"perl": {Agent: "voltagent-lang:python-pro", Scope: "lib/**/*.pm"},
+
+	// --- Static Site Generators ---
+	"hugo": {Agent: "voltagent-lang:golang-pro", Scope: "content/**/*.md"},
+
+	// --- Infra ---
+	"docker":         {Agent: "voltagent-infra:docker-expert", Scope: "**/Dockerfile"},
+	"terraform":      {Agent: "voltagent-infra:terraform-engineer", Scope: "**/*.tf"},
+	"helm":           {Agent: "voltagent-infra:kubernetes-specialist", Scope: "**/*.yaml"},
+	"pulumi":         {Agent: "voltagent-infra:cloud-architect", Scope: "**/*"},
+	"ansible":        {Agent: "voltagent-infra:devops-engineer", Scope: "**/*.yml"},
+	"github-actions": {Agent: "voltagent-infra:deployment-engineer", Scope: ".github/workflows/**/*.yml"},
 }
 
 const (
