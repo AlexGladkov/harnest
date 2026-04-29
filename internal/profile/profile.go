@@ -133,6 +133,49 @@ func Install(name string) error {
 	return nil
 }
 
+// InstallTo writes a builtin profile to a custom base directory (baseDir/profiles/).
+func InstallTo(name, baseDir string) error {
+	content, ok := builtinProfiles[name]
+	if !ok {
+		return fmt.Errorf("unknown builtin profile: %s", name)
+	}
+
+	dir := filepath.Join(baseDir, "profiles")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("creating profiles dir: %w", err)
+	}
+
+	path := filepath.Join(dir, name+".md")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+		return fmt.Errorf("writing profile: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("renaming profile: %w", err)
+	}
+
+	fmt.Printf("  → %s\n", path)
+	return nil
+}
+
+// IsModifiedIn checks if an installed builtin profile in a custom dir differs from its template.
+func IsModifiedIn(name, baseDir string) (bool, error) {
+	builtin, ok := builtinProfiles[name]
+	if !ok {
+		return false, nil
+	}
+	path := filepath.Join(baseDir, "profiles", name+".md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return string(data) != builtin, nil
+}
+
 // IsModified checks if an installed builtin profile differs from its template.
 func IsModified(name string) (bool, error) {
 	builtin, ok := builtinProfiles[name]

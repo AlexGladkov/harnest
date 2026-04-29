@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	agents_pkg "github.com/AlexGladkov/harnest/internal/agents"
 	"github.com/AlexGladkov/harnest/internal/config"
 	"github.com/AlexGladkov/harnest/internal/converter"
 	"github.com/AlexGladkov/harnest/internal/detector"
@@ -17,7 +18,7 @@ import (
 	"github.com/AlexGladkov/harnest/internal/wizard"
 )
 
-const version = "0.7.0"
+const version = "0.9.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -54,14 +55,20 @@ func main() {
 // --- install ---
 
 func runInstall() {
-	fmt.Println("Installing Harnest framework...")
-	if err := install.InstallAll(); err != nil {
+	harnessName := parseFlag("--harness", "claude-code")
+
+	fmt.Printf("Installing Harnest framework for %s...\n", harnessName)
+	if err := install.InstallAll(harnessName); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
+	globalDir, _ := harness.GlobalDir(harnessName)
+	configPath, _ := harness.GlobalConfigPath(harnessName)
+
 	fmt.Println("\nDone. Installed:")
-	fmt.Println("  - 6 workflow profiles → ~/.claude/profiles/")
-	fmt.Println("  - global CLAUDE.md    → ~/.claude/CLAUDE.md")
+	fmt.Printf("  - %d workflow profiles → %s/profiles/\n", len(profile.BuiltinNames()), globalDir)
+	fmt.Printf("  - global config        → %s\n", configPath)
 	fmt.Println("\nNext: cd <project> && harnest init")
 }
 
@@ -107,13 +114,14 @@ func runInit() {
 	}
 
 	// Agent selection
-	var agents mapping.AgentConfig
+	discovered := agents_pkg.Discover()
+	var agentsCfg mapping.AgentConfig
 	if nonInteractive {
-		agents = mapping.Resolve(stacks)
+		agentsCfg = mapping.Resolve(stacks, discovered, harnessName)
 	} else {
 		structure := mapping.ResolveStructure(stacks)
-		suggestions := mapping.GetSuggestions(stacks)
-		agents = wizard.Run(os.Stdin, structure, suggestions)
+		suggestions := mapping.GetSuggestions(stacks, discovered, harnessName)
+		agentsCfg = wizard.Run(os.Stdin, structure, suggestions)
 	}
 
 	gen, err := harness.Get(harnessName)
@@ -122,15 +130,15 @@ func runInit() {
 		os.Exit(1)
 	}
 
-	outPath, err := gen.Generate(dir, stacks, agents)
+	outPath, err := gen.Generate(dir, stacks, agentsCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error generating config: %v\n", err)
 		os.Exit(1)
 	}
 
 	fmt.Printf("\nGenerated: %s\n", outPath)
-	fmt.Printf("  Consilium roles: %d\n", len(agents.Consilium))
-	fmt.Printf("  Exec agents: %d\n", len(agents.Exec))
+	fmt.Printf("  Consilium roles: %d\n", len(agentsCfg.Consilium))
+	fmt.Printf("  Exec agents: %d\n", len(agentsCfg.Exec))
 }
 
 func selectHarness() string {
@@ -243,8 +251,9 @@ func runAgents() {
 			// No project config — show what would be generated
 			fmt.Println("No project config found. Showing suggestions from detection:")
 			stacks := detector.Detect(dir)
-			agents := mapping.Resolve(stacks)
-			printAgentConfig(agents)
+			disc := agents_pkg.Discover()
+			resolved := mapping.Resolve(stacks, disc, "claude-code")
+			printAgentConfig(resolved)
 			return
 		}
 		fmt.Println("Project agent config:")
@@ -382,7 +391,7 @@ func printUsage() {
 	fmt.Printf(`harnest - AI coding assistant configurator
 
 Usage:
-  harnest install
+  harnest install [--harness %s]
   harnest init [dir] [--harness %s] [--non-interactive]
   harnest detect [dir]
   harnest profiles list
@@ -396,7 +405,7 @@ Usage:
   harnest version
 
 Commands:
-  install    Install Harnest framework (profiles + global CLAUDE.md)
+  install    Install Harnest framework (profiles + global config) for a harness
   init       Detect stack and generate project config with agent wizard
   detect     Show detected stack without generating
   profiles   Manage workflow profiles (create custom, edit, list, remove)
@@ -407,5 +416,5 @@ Commands:
 Flags:
   --harness          Target harness (%s)
   --non-interactive  Use suggested agents without wizard (for CI/scripts)
-`, hlist, hlist)
+`, hlist, hlist, hlist)
 }

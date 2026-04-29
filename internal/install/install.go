@@ -8,39 +8,65 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/AlexGladkov/harnest/internal/harness"
 	"github.com/AlexGladkov/harnest/internal/profile"
 )
 
-func InstallAll() error {
+// InstallAll installs profiles and global config for the given harness.
+// For "claude-code" it uses the default ~/.claude/ paths (backwards compat).
+// For other harnesses it derives the target dir from harness.GlobalDir().
+func InstallAll(harnessName string) error {
 	reader := bufio.NewReader(os.Stdin)
+
+	globalDir, err := harness.GlobalDir(harnessName)
+	if err != nil {
+		return err
+	}
+
+	isDefault := harnessName == "claude-code"
 
 	fmt.Println("Installing profiles...")
 	for _, name := range profile.BuiltinNames() {
-		modified, err := profile.IsModified(name)
+		var modified bool
+		if isDefault {
+			modified, err = profile.IsModified(name)
+		} else {
+			modified, err = profile.IsModifiedIn(name, globalDir)
+		}
 		if err != nil {
 			return fmt.Errorf("checking profile %s: %w", name, err)
 		}
 		if modified {
-			action := promptConflict(reader, name)
+			action := promptConflict(reader, name, globalDir)
 			if action == "skip" {
 				fmt.Printf("  → skipped %s.md\n", name)
 				continue
 			}
 		}
-		if err := profile.Install(name); err != nil {
+		if isDefault {
+			err = profile.Install(name)
+		} else {
+			err = profile.InstallTo(name, globalDir)
+		}
+		if err != nil {
 			return fmt.Errorf("installing profile %s: %w", name, err)
 		}
 	}
 
-	fmt.Println("\nInstalling global CLAUDE.md...")
-	if err := installGlobalConfig(); err != nil {
+	configPath, err := harness.GlobalConfigPath(harnessName)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("\nInstalling global config → %s ...\n", configPath)
+	if err := installGlobalConfig(globalDir, configPath); err != nil {
 		return fmt.Errorf("installing global config: %w", err)
 	}
 
 	return nil
 }
 
-func promptConflict(reader *bufio.Reader, name string) string {
+func promptConflict(reader *bufio.Reader, name, baseDir string) string {
 	for {
 		fmt.Printf("  → %s.md (modified locally)\n", name)
 		fmt.Print("    [o]verwrite  [s]kip  [d]iff: ")
@@ -53,8 +79,7 @@ func promptConflict(reader *bufio.Reader, name string) string {
 		case "s", "skip":
 			return "skip"
 		case "d", "diff":
-			showDiff(name)
-			// After diff, ask again without diff option
+			showDiff(name, baseDir)
 			for {
 				fmt.Print("    [o]verwrite  [s]kip: ")
 				input2, _ := reader.ReadString('\n')
@@ -74,19 +99,13 @@ func promptConflict(reader *bufio.Reader, name string) string {
 	}
 }
 
-func showDiff(name string) {
+func showDiff(name, baseDir string) {
 	builtin, ok := profile.BuiltinContent(name)
 	if !ok {
 		return
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Println("    Cannot determine home directory")
-		return
-	}
-
-	existingPath := filepath.Join(home, ".claude", "profiles", name+".md")
+	existingPath := filepath.Join(baseDir, "profiles", name+".md")
 
 	tmp, err := os.CreateTemp("", "harnest-builtin-*.md")
 	if err != nil {
@@ -104,22 +123,15 @@ func showDiff(name string) {
 	cmd := exec.Command("diff", "-u", "--label", "builtin/"+name+".md", "--label", "installed/"+name+".md", tmp.Name(), existingPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Run() // diff returns exit code 1 when files differ — ignore
+	cmd.Run()
 	fmt.Println()
 }
 
-func installGlobalConfig() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	dir := filepath.Join(home, ".claude")
+func installGlobalConfig(dir, path string) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 
-	path := filepath.Join(dir, "CLAUDE.md")
 	managed := managedStart + "\n" + globalTemplate + "\n" + managedEnd
 
 	data, err := os.ReadFile(path)
