@@ -1,6 +1,10 @@
 package mapping
 
-import "github.com/AlexGladkov/harnest/internal/detector"
+import (
+	"strings"
+
+	"github.com/AlexGladkov/harnest/internal/detector"
+)
 
 type AgentConfig struct {
 	Consilium []ConsiliumRole
@@ -141,11 +145,7 @@ func Resolve(stacks []detector.Stack) AgentConfig {
 	// Exec agents from detected stacks
 	for _, s := range stacks {
 		if ea, ok := execMap[s.Name]; ok {
-			// Adjust scope path based on detected path
-			scope := ea.Scope
-			if s.Path != "." && s.Path != "./" {
-				// scope already has the right prefix for known structures
-			}
+			scope := buildScope(s, ea)
 			config.Exec = append(config.Exec, ExecAgent{
 				Agent: ea.Agent,
 				Scope: scope,
@@ -182,9 +182,10 @@ func ResolveStructure(stacks []detector.Stack) AgentStructure {
 	// Exec scopes from detected stacks
 	for _, st := range stacks {
 		if ea, ok := execMap[st.Name]; ok {
+			scope := buildScope(st, ea)
 			s.ExecScopes = append(s.ExecScopes, ExecScope{
 				StackName: st.Name,
-				Scope:     ea.Scope,
+				Scope:     scope,
 			})
 		}
 	}
@@ -231,6 +232,25 @@ func GetSuggestions(stacks []detector.Stack) Suggestions {
 	}
 
 	return sug
+}
+
+// buildScope generates the correct glob scope using the detected path.
+// If the detected path differs from the hardcoded exec scope prefix,
+// replace the prefix with the actual detected path.
+func buildScope(s detector.Stack, ea ExecAgent) string {
+	if s.Path == "." || s.Path == "./" {
+		return ea.Scope
+	}
+
+	detectedDir := strings.TrimSuffix(s.Path, "/")
+
+	// Extract the file extension pattern from the default scope (e.g. "**/*.kt")
+	// Default scope format: "prefix/**/*.ext" or "prefix/**"
+	parts := strings.SplitN(ea.Scope, "/", 2)
+	if len(parts) == 2 {
+		return detectedDir + "/" + parts[1]
+	}
+	return detectedDir + "/**"
 }
 
 func lookupOrDefault(m map[string]string, key, fallback string) string {

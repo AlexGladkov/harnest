@@ -36,34 +36,55 @@ func Detect(root string) []Stack {
 func detectKotlin(root string) []Stack {
 	var stacks []Stack
 
-	// Spring Boot backend
-	if fileContains(filepath.Join(root, "backend", "build.gradle.kts"), "spring-boot") ||
-		fileContains(filepath.Join(root, "backend", "build.gradle.kts"), "spring.boot") ||
-		fileContains(filepath.Join(root, "build.gradle.kts"), "spring-boot") ||
-		fileContains(filepath.Join(root, "build.gradle.kts"), "spring.boot") {
-		stacks = append(stacks, Stack{
-			Name:     "spring-boot",
-			Lang:     "kotlin",
-			Category: "backend",
-			Path:     findRelDir(root, "backend"),
-		})
+	// Spring Boot backend — scan root + all subdirs for build.gradle.kts with spring markers
+	for _, dir := range allCandidateDirs(root) {
+		gradle := filepath.Join(root, dir, "build.gradle.kts")
+		if isSpringGradle(gradle) {
+			path := dir + "/"
+			if dir == "." {
+				path = "."
+			}
+			stacks = append(stacks, Stack{
+				Name:     "spring-boot",
+				Lang:     "kotlin",
+				Category: "backend",
+				Path:     path,
+			})
+			break
+		}
 	}
 
-	// Compose Multiplatform / KMP
-	if dirExists(filepath.Join(root, "composeApp")) ||
-		fileContains(filepath.Join(root, "build.gradle.kts"), "compose") {
+
+	// Compose Multiplatform / KMP — look for composeApp dir anywhere at top level
+	composeFound := false
+	for _, dir := range subdirs(root) {
+		if strings.HasPrefix(strings.ToLower(dir), "compose") && dirExists(filepath.Join(root, dir)) {
+			if fileExists(filepath.Join(root, dir, "build.gradle.kts")) {
+				stacks = append(stacks, Stack{
+					Name:     "compose-multiplatform",
+					Lang:     "kotlin",
+					Category: "shared",
+					Path:     dir + "/",
+				})
+				composeFound = true
+				break
+			}
+		}
+	}
+	if !composeFound && fileContains(filepath.Join(root, "build.gradle.kts"), "compose") {
 		stacks = append(stacks, Stack{
 			Name:     "compose-multiplatform",
 			Lang:     "kotlin",
 			Category: "shared",
-			Path:     findRelDir(root, "composeApp"),
+			Path:     ".",
 		})
+		composeFound = true
 	}
 
 	// Android-only
 	if dirExists(filepath.Join(root, "app")) &&
 		fileExists(filepath.Join(root, "app", "build.gradle.kts")) &&
-		!dirExists(filepath.Join(root, "composeApp")) {
+		!composeFound {
 		stacks = append(stacks, Stack{
 			Name:     "android",
 			Lang:     "kotlin",
@@ -102,39 +123,55 @@ func detectSwift(root string) []Stack {
 func detectJavaScript(root string) []Stack {
 	var stacks []Stack
 
-	// Vue
-	for _, dir := range []string{"vue-frontend", "frontend", "web", "."} {
+	candidates := allCandidateDirs(root)
+
+	// Vue — scan all subdirs
+	for _, dir := range candidates {
 		pkgPath := filepath.Join(root, dir, "package.json")
 		if fileContains(pkgPath, "\"vue\"") {
+			path := dir + "/"
+			if dir == "." {
+				path = "."
+			}
 			stacks = append(stacks, Stack{
 				Name:     "vue",
 				Lang:     "typescript",
 				Category: "frontend",
-				Path:     dir + "/",
+				Path:     path,
 			})
 			break
 		}
 	}
 
-	// React / Next.js
-	for _, dir := range []string{"frontend", "web", "client", "."} {
-		pkgPath := filepath.Join(root, dir, "package.json")
-		if fileContains(pkgPath, "\"next\"") {
-			stacks = append(stacks, Stack{
-				Name:     "nextjs",
-				Lang:     "typescript",
-				Category: "frontend",
-				Path:     dir + "/",
-			})
-			break
-		} else if fileContains(pkgPath, "\"react\"") && !fileContains(pkgPath, "\"next\"") {
-			stacks = append(stacks, Stack{
-				Name:     "react",
-				Lang:     "typescript",
-				Category: "frontend",
-				Path:     dir + "/",
-			})
-			break
+	// React / Next.js — scan all subdirs (skip if Vue already found in same dir)
+	if len(stacks) == 0 {
+		for _, dir := range candidates {
+			pkgPath := filepath.Join(root, dir, "package.json")
+			if fileContains(pkgPath, "\"next\"") {
+				path := dir + "/"
+				if dir == "." {
+					path = "."
+				}
+				stacks = append(stacks, Stack{
+					Name:     "nextjs",
+					Lang:     "typescript",
+					Category: "frontend",
+					Path:     path,
+				})
+				break
+			} else if fileContains(pkgPath, "\"react\"") && !fileContains(pkgPath, "\"next\"") {
+				path := dir + "/"
+				if dir == "." {
+					path = "."
+				}
+				stacks = append(stacks, Stack{
+					Name:     "react",
+					Lang:     "typescript",
+					Category: "frontend",
+					Path:     path,
+				})
+				break
+			}
 		}
 	}
 
@@ -148,16 +185,20 @@ func detectJavaScript(root string) []Stack {
 		})
 	}
 
-	// Node.js backend
-	for _, dir := range []string{"server", "api", "backend"} {
+	// Node.js backend — scan all subdirs
+	for _, dir := range candidates {
 		pkgPath := filepath.Join(root, dir, "package.json")
 		if fileContains(pkgPath, "\"express\"") || fileContains(pkgPath, "\"fastify\"") ||
 			fileContains(pkgPath, "\"nestjs\"") || fileContains(pkgPath, "\"@nestjs/core\"") {
+			path := dir + "/"
+			if dir == "." {
+				path = "."
+			}
 			stacks = append(stacks, Stack{
 				Name:     "node",
 				Lang:     "typescript",
 				Category: "backend",
-				Path:     dir + "/",
+				Path:     path,
 			})
 			break
 		}
@@ -169,30 +210,25 @@ func detectJavaScript(root string) []Stack {
 func detectPython(root string) []Stack {
 	var stacks []Stack
 
-	pyproject := filepath.Join(root, "pyproject.toml")
-	requirements := filepath.Join(root, "requirements.txt")
+	for _, dir := range allCandidateDirs(root) {
+		pyproject := filepath.Join(root, dir, "pyproject.toml")
+		requirements := filepath.Join(root, dir, "requirements.txt")
 
-	if fileContains(pyproject, "fastapi") || fileContains(requirements, "fastapi") {
-		stacks = append(stacks, Stack{
-			Name:     "fastapi",
-			Lang:     "python",
-			Category: "backend",
-			Path:     ".",
-		})
-	} else if fileContains(pyproject, "django") || fileContains(requirements, "django") {
-		stacks = append(stacks, Stack{
-			Name:     "django",
-			Lang:     "python",
-			Category: "backend",
-			Path:     ".",
-		})
-	} else if fileContains(pyproject, "flask") || fileContains(requirements, "flask") {
-		stacks = append(stacks, Stack{
-			Name:     "flask",
-			Lang:     "python",
-			Category: "backend",
-			Path:     ".",
-		})
+		path := dir + "/"
+		if dir == "." {
+			path = "."
+		}
+
+		if fileContains(pyproject, "fastapi") || fileContains(requirements, "fastapi") {
+			stacks = append(stacks, Stack{Name: "fastapi", Lang: "python", Category: "backend", Path: path})
+			return stacks
+		} else if fileContains(pyproject, "django") || fileContains(requirements, "django") {
+			stacks = append(stacks, Stack{Name: "django", Lang: "python", Category: "backend", Path: path})
+			return stacks
+		} else if fileContains(pyproject, "flask") || fileContains(requirements, "flask") {
+			stacks = append(stacks, Stack{Name: "flask", Lang: "python", Category: "backend", Path: path})
+			return stacks
+		}
 	}
 
 	return stacks
@@ -235,6 +271,36 @@ func detectFlutter(root string) []Stack {
 }
 
 // helpers
+
+// subdirs returns names of all first-level directories in root (excluding hidden dirs).
+func subdirs(root string) []string {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			dirs = append(dirs, e.Name())
+		}
+	}
+	return dirs
+}
+
+// allCandidateDirs returns all first-level subdirs plus "." (root) at the end.
+// This allows detectors to scan every possible location.
+func allCandidateDirs(root string) []string {
+	dirs := subdirs(root)
+	dirs = append(dirs, ".")
+	return dirs
+}
+
+// isSpringGradle checks if a build.gradle.kts contains Spring Boot markers.
+func isSpringGradle(path string) bool {
+	return fileContains(path, "spring-boot") ||
+		fileContains(path, "spring.boot") ||
+		fileContains(path, "springframework.boot")
+}
 
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
