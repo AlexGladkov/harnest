@@ -251,7 +251,7 @@ const (
 	defaultMobile   = "kotlin-multiplatform-developer"
 )
 
-func Resolve(stacks []detector.Stack) AgentConfig {
+func Resolve(stacks []detector.Stack, _discovered []string, _harnessName string) AgentConfig {
 	config := AgentConfig{}
 
 	// Determine primary language from stacks
@@ -350,7 +350,7 @@ func ResolveStructure(stacks []detector.Stack) AgentStructure {
 	return s
 }
 
-func GetSuggestions(stacks []detector.Stack) Suggestions {
+func GetSuggestions(stacks []detector.Stack, _discovered []string, _harnessName string) Suggestions {
 	sug := Suggestions{
 		Consilium: make(map[string]string),
 		Exec:      make(map[string]string),

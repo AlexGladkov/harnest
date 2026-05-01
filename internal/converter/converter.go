@@ -19,7 +19,7 @@ func Convert(dir, from, to string) (string, error) {
 		// No existing config — detect and generate fresh
 		fmt.Printf("No existing %s config found, detecting stack...\n", from)
 		stacks := detector.Detect(dir)
-		agents = mapping.Resolve(stacks)
+		agents = mapping.Resolve(stacks, nil, "")
 	} else {
 		// Use existing config
 		agents = mapping.AgentConfig{
