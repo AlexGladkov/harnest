@@ -18,7 +18,7 @@ import (
 	"github.com/AlexGladkov/harnest/internal/wizard"
 )
 
-const version = "0.9.0"
+const version = "0.10.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -239,7 +239,7 @@ func runProfiles() {
 
 func runAgents() {
 	if len(os.Args) < 3 {
-		fmt.Fprintln(os.Stderr, "usage: harnest agents <list|set> [role] [agent]")
+		fmt.Fprintln(os.Stderr, "usage: harnest agents <list|set|set-model> [role] [agent|tier]")
 		os.Exit(1)
 	}
 
@@ -259,7 +259,13 @@ func runAgents() {
 		fmt.Println("Project agent config:")
 		fmt.Println("\nConsilium:")
 		for _, c := range cfg.Consilium {
-			fmt.Printf("  %-15s → %s\n", c.Role, c.Agent)
+			tier := ""
+			if cfg.Models != nil {
+				if t, ok := cfg.Models[c.Role]; ok {
+					tier = fmt.Sprintf(" [%s]", t)
+				}
+			}
+			fmt.Printf("  %-15s → %s%s\n", c.Role, c.Agent, tier)
 		}
 		fmt.Println("\nExecuting:")
 		for _, e := range cfg.Exec {
@@ -284,6 +290,25 @@ func runAgents() {
 			os.Exit(1)
 		}
 		fmt.Printf("Set %s → %s\n", role, agent)
+
+	case "set-model":
+		if len(os.Args) < 5 {
+			fmt.Fprintln(os.Stderr, "usage: harnest agents set-model <role> <tier>")
+			fmt.Fprintln(os.Stderr, "  tier: high, medium, low")
+			os.Exit(1)
+		}
+		role := os.Args[3]
+		tier := os.Args[4]
+		dir, _ := os.Getwd()
+		if d := parseFlag("--dir", ""); d != "" {
+			dir = d
+		}
+		err := config.SetModel(dir, role, tier)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Set model for %s → %s\n", role, tier)
 
 	default:
 		fmt.Fprintf(os.Stderr, "unknown agents subcommand: %s\n", os.Args[2])
@@ -377,7 +402,7 @@ func hasFlag(flag string) bool {
 }
 
 func isSubcommand(s string) bool {
-	subs := []string{"list", "add", "edit", "remove", "set"}
+	subs := []string{"list", "add", "edit", "remove", "set", "set-model"}
 	for _, sub := range subs {
 		if s == sub {
 			return true
@@ -400,6 +425,7 @@ Usage:
   harnest profiles remove <name>
   harnest agents list [dir]
   harnest agents set <role> <agent>
+  harnest agents set-model <role> <tier>
   harnest convert --from <harness> --to <harness> [dir]
   harnest update
   harnest version

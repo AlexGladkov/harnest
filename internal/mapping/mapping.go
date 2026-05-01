@@ -9,6 +9,29 @@ import (
 type AgentConfig struct {
 	Consilium []ConsiliumRole
 	Exec      []ExecAgent
+	Models    map[string]string // role → tier (high/medium/low)
+}
+
+// defaultModelTiers defines the default capability tier per consilium role.
+var defaultModelTiers = map[string]string{
+	"architect":   "high",
+	"security":    "high",
+	"api":         "medium",
+	"frontend":    "medium",
+	"ui":          "medium",
+	"devops":      "medium",
+	"diagnostics": "medium",
+	"test":        "medium",
+	"mobile":      "medium",
+}
+
+// DefaultModelTiers returns a copy of the default role→tier mapping.
+func DefaultModelTiers() map[string]string {
+	m := make(map[string]string, len(defaultModelTiers))
+	for k, v := range defaultModelTiers {
+		m[k] = v
+	}
+	return m
 }
 
 type ConsiliumRole struct {
@@ -21,299 +44,354 @@ type ExecAgent struct {
 	Scope string
 }
 
-// agent lookup tables
-
-var architectMap = map[string]string{
-	"kotlin":     "voltagent-lang:java-architect",
-	"java":       "voltagent-lang:java-architect",
-	"scala":      "voltagent-lang:java-architect",
-	"groovy":     "voltagent-lang:java-architect",
-	"clojure":    "voltagent-lang:java-architect",
-	"swift":      "voltagent-lang:swift-expert",
-	"python":     "voltagent-lang:python-pro",
-	"typescript": "voltagent-lang:typescript-pro",
-	"go":         "voltagent-lang:golang-pro",
-	"rust":       "voltagent-lang:rust-engineer",
-	"dart":       "voltagent-lang:flutter-expert",
-	"ruby":       "voltagent-lang:rails-expert",
-	"php":        "voltagent-lang:php-pro",
-	"csharp":     "voltagent-lang:dotnet-core-expert",
-	"elixir":     "voltagent-lang:elixir-expert",
-	"erlang":     "voltagent-lang:elixir-expert",
-	"gleam":      "voltagent-lang:elixir-expert",
-	"haskell":    "voltagent-lang:elixir-expert",
-	"ocaml":      "voltagent-lang:elixir-expert",
-	"c":          "voltagent-lang:cpp-pro",
-	"cpp":        "voltagent-lang:cpp-pro",
-	"zig":        "voltagent-lang:cpp-pro",
-	"nim":        "voltagent-lang:python-pro",
-	"vlang":      "voltagent-lang:golang-pro",
-	"crystal":    "voltagent-lang:ruby-pro",
-	"julia":      "voltagent-lang:python-pro",
-	"r":          "voltagent-lang:python-pro",
-	"lua":        "voltagent-lang:javascript-pro",
-	"perl":       "voltagent-lang:python-pro",
-	"hcl":        "voltagent-infra:terraform-engineer",
-	"yaml":       "voltagent-infra:devops-engineer",
+// ExecKeywords defines keywords to match an agent + its file scope.
+type ExecKeywords struct {
+	Keywords []string
+	Scope    string
 }
 
-var frontendMap = map[string]string{
-	"vue":       "voltagent-lang:vue-expert",
-	"nuxt":      "voltagent-lang:vue-expert",
-	"react":     "voltagent-lang:react-specialist",
-	"nextjs":    "voltagent-lang:nextjs-developer",
-	"gatsby":    "voltagent-lang:react-specialist",
-	"remix":     "voltagent-lang:react-specialist",
-	"angular":   "voltagent-lang:angular-architect",
-	"svelte":    "voltagent-lang:javascript-pro",
-	"sveltekit": "voltagent-lang:javascript-pro",
-	"solid":     "voltagent-lang:javascript-pro",
-	"qwik":      "voltagent-lang:javascript-pro",
-	"astro":     "voltagent-lang:javascript-pro",
-	"ember":     "voltagent-lang:javascript-pro",
-	"eleventy":  "voltagent-lang:javascript-pro",
-	"hugo":      "voltagent-lang:golang-pro",
-	"jekyll":    "voltagent-lang:rails-expert",
-	"flutter":   "voltagent-lang:flutter-expert",
-	"swiftui":   "voltagent-lang:swift-expert",
+// --- Keyword maps: lang -> search keywords for matching discovered agents ---
+
+var architectKeywords = map[string][]string{
+	"kotlin":     {"java", "architect"},
+	"java":       {"java", "architect"},
+	"scala":      {"java", "architect"},
+	"groovy":     {"java", "architect"},
+	"clojure":    {"java", "architect"},
+	"swift":      {"swift"},
+	"python":     {"python"},
+	"typescript": {"typescript"},
+	"go":         {"golang", "go"},
+	"rust":       {"rust"},
+	"dart":       {"flutter", "dart"},
+	"ruby":       {"ruby", "rails"},
+	"php":        {"php"},
+	"csharp":     {"dotnet", "csharp"},
+	"elixir":     {"elixir"},
+	"erlang":     {"elixir", "erlang"},
+	"gleam":      {"elixir", "gleam"},
+	"haskell":    {"elixir", "haskell"},
+	"ocaml":      {"elixir", "ocaml"},
+	"c":          {"cpp", "c"},
+	"cpp":        {"cpp"},
+	"zig":        {"cpp", "zig"},
+	"nim":        {"python", "nim"},
+	"vlang":      {"golang", "go"},
+	"crystal":    {"ruby", "crystal"},
+	"julia":      {"python", "julia"},
+	"r":          {"python", "r"},
+	"lua":        {"javascript", "lua"},
+	"perl":       {"python", "perl"},
+	"hcl":        {"terraform"},
+	"yaml":       {"devops"},
 }
 
-var mobileMap = map[string]string{
-	"kotlin":  "kotlin-multiplatform-developer",
-	"swift":   "voltagent-lang:swift-expert",
-	"dart":    "voltagent-lang:flutter-expert",
+var frontendKeywords = map[string][]string{
+	"vue":       {"vue"},
+	"nuxt":      {"vue", "nuxt"},
+	"react":     {"react"},
+	"nextjs":    {"nextjs", "next"},
+	"gatsby":    {"react", "gatsby"},
+	"remix":     {"react", "remix"},
+	"angular":   {"angular"},
+	"svelte":    {"javascript", "svelte"},
+	"sveltekit": {"javascript", "svelte"},
+	"solid":     {"javascript", "solid"},
+	"qwik":      {"javascript", "qwik"},
+	"astro":     {"javascript", "astro"},
+	"ember":     {"javascript", "ember"},
+	"eleventy":  {"javascript", "eleventy"},
+	"hugo":      {"golang", "hugo"},
+	"jekyll":    {"rails", "jekyll"},
+	"flutter":   {"flutter"},
+	"swiftui":   {"swift"},
 }
 
-var securityMap = map[string]string{
-	"kotlin": "security-kotlin",
+var mobileKeywords = map[string][]string{
+	"kotlin": {"kotlin", "multiplatform"},
+	"swift":  {"swift"},
+	"dart":   {"flutter", "dart"},
 }
 
-var diagnosticsMap = map[string]string{
-	"kotlin": "kotlin-diagnostics",
+var securityKeywords = map[string][]string{
+	"kotlin": {"security", "kotlin"},
 }
 
-var devopsMap = map[string]string{
-	// default for all
+var diagnosticsKeywords = map[string][]string{
+	"kotlin": {"diagnostics", "kotlin"},
 }
 
-var testMap = map[string]string{
-	"kotlin": "test-spring",
+var testKeywords = map[string][]string{
+	"kotlin": {"test", "spring"},
 }
 
-var execMap = map[string]ExecAgent{
+// defaultRoleKeywords — fallback keywords per role (used when lang not in map)
+var defaultRoleKeywords = map[string][]string{
+	"architect":   {"architect"},
+	"frontend":    {"frontend", "vue"},
+	"ui":          {"ui", "designer"},
+	"security":    {"security"},
+	"devops":      {"devops"},
+	"api":         {"api", "designer"},
+	"diagnostics": {"diagnostics"},
+	"test":        {"test"},
+	"mobile":      {"mobile", "multiplatform"},
+}
+
+// execKeywords — stack name -> keywords + scope
+var execKeywords = map[string]ExecKeywords{
 	// --- Kotlin ---
-	"spring-boot":           {Agent: "builder-spring-feature", Scope: "backend/**/*.kt"},
-	"ktor":                  {Agent: "voltagent-lang:kotlin-specialist", Scope: "backend/**/*.kt"},
-	"quarkus":               {Agent: "voltagent-lang:spring-boot-engineer", Scope: "src/**/*.kt"},
-	"micronaut":             {Agent: "voltagent-lang:spring-boot-engineer", Scope: "src/**/*.kt"},
-	"compose-multiplatform": {Agent: "kotlin-multiplatform-developer", Scope: "composeApp/**/*.kt"},
-	"android":               {Agent: "kotlin-multiplatform-developer", Scope: "app/**/*.kt"},
+	"spring-boot":           {Keywords: []string{"spring", "feature", "builder"}, Scope: "backend/**/*.kt"},
+	"ktor":                  {Keywords: []string{"kotlin", "ktor"}, Scope: "backend/**/*.kt"},
+	"quarkus":               {Keywords: []string{"spring", "boot", "kotlin"}, Scope: "src/**/*.kt"},
+	"micronaut":             {Keywords: []string{"spring", "boot", "kotlin"}, Scope: "src/**/*.kt"},
+	"compose-multiplatform": {Keywords: []string{"kotlin", "multiplatform", "compose"}, Scope: "composeApp/**/*.kt"},
+	"android":               {Keywords: []string{"kotlin", "multiplatform", "android"}, Scope: "app/**/*.kt"},
 
 	// --- Java ---
-	"spring-boot-java": {Agent: "voltagent-lang:spring-boot-engineer", Scope: "src/**/*.java"},
-	"java":             {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.java"},
+	"spring-boot-java": {Keywords: []string{"spring", "boot", "java"}, Scope: "src/**/*.java"},
+	"java":             {Keywords: []string{"java", "architect"}, Scope: "src/**/*.java"},
 
 	// --- Swift ---
-	"ios-native":    {Agent: "voltagent-lang:swift-expert", Scope: "iosApp/**/*.swift"},
-	"swift-package": {Agent: "voltagent-lang:swift-expert", Scope: "**/*.swift"},
-	"vapor":         {Agent: "voltagent-lang:swift-expert", Scope: "Sources/**/*.swift"},
+	"ios-native":    {Keywords: []string{"swift"}, Scope: "iosApp/**/*.swift"},
+	"swift-package": {Keywords: []string{"swift"}, Scope: "**/*.swift"},
+	"vapor":         {Keywords: []string{"swift", "vapor"}, Scope: "Sources/**/*.swift"},
 
 	// --- JS/TS Frontend ---
-	"vue":       {Agent: "voltagent-lang:vue-expert", Scope: "src/**/*.vue"},
-	"nuxt":      {Agent: "voltagent-lang:vue-expert", Scope: "src/**/*.vue"},
-	"react":     {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
-	"nextjs":    {Agent: "voltagent-lang:nextjs-developer", Scope: "src/**/*.tsx"},
-	"gatsby":    {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
-	"remix":     {Agent: "voltagent-lang:react-specialist", Scope: "app/**/*.tsx"},
-	"angular":   {Agent: "voltagent-lang:angular-architect", Scope: "src/**/*.ts"},
-	"svelte":    {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.svelte"},
-	"sveltekit": {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.svelte"},
-	"solid":     {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.tsx"},
-	"qwik":      {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.tsx"},
-	"astro":     {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.astro"},
-	"ember":     {Agent: "voltagent-lang:javascript-pro", Scope: "app/**/*.js"},
-	"eleventy":  {Agent: "voltagent-lang:javascript-pro", Scope: "src/**/*.njk"},
+	"vue":       {Keywords: []string{"vue"}, Scope: "src/**/*.vue"},
+	"nuxt":      {Keywords: []string{"vue", "nuxt"}, Scope: "src/**/*.vue"},
+	"react":     {Keywords: []string{"react"}, Scope: "src/**/*.tsx"},
+	"nextjs":    {Keywords: []string{"nextjs", "next"}, Scope: "src/**/*.tsx"},
+	"gatsby":    {Keywords: []string{"react", "gatsby"}, Scope: "src/**/*.tsx"},
+	"remix":     {Keywords: []string{"react", "remix"}, Scope: "app/**/*.tsx"},
+	"angular":   {Keywords: []string{"angular"}, Scope: "src/**/*.ts"},
+	"svelte":    {Keywords: []string{"javascript", "svelte"}, Scope: "src/**/*.svelte"},
+	"sveltekit": {Keywords: []string{"javascript", "svelte"}, Scope: "src/**/*.svelte"},
+	"solid":     {Keywords: []string{"javascript", "solid"}, Scope: "src/**/*.tsx"},
+	"qwik":      {Keywords: []string{"javascript", "qwik"}, Scope: "src/**/*.tsx"},
+	"astro":     {Keywords: []string{"javascript", "astro"}, Scope: "src/**/*.astro"},
+	"ember":     {Keywords: []string{"javascript", "ember"}, Scope: "app/**/*.js"},
+	"eleventy":  {Keywords: []string{"javascript", "eleventy"}, Scope: "src/**/*.njk"},
 
 	// --- JS/TS Backend ---
-	"node":   {Agent: "voltagent-lang:node-specialist", Scope: "src/**/*.ts"},
-	"deno":   {Agent: "voltagent-lang:typescript-pro", Scope: "**/*.ts"},
-	"bun":    {Agent: "voltagent-lang:typescript-pro", Scope: "**/*.ts"},
-	"strapi": {Agent: "voltagent-lang:node-specialist", Scope: "src/**/*.js"},
+	"node":   {Keywords: []string{"node"}, Scope: "src/**/*.ts"},
+	"deno":   {Keywords: []string{"typescript", "deno"}, Scope: "**/*.ts"},
+	"bun":    {Keywords: []string{"typescript", "bun"}, Scope: "**/*.ts"},
+	"strapi": {Keywords: []string{"node", "strapi"}, Scope: "src/**/*.js"},
 
 	// --- JS/TS Mobile ---
-	"expo":         {Agent: "voltagent-lang:expo-react-native-expert", Scope: "src/**/*.tsx"},
-	"react-native": {Agent: "voltagent-lang:expo-react-native-expert", Scope: "src/**/*.tsx"},
-	"ionic":        {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
-	"capacitor":    {Agent: "voltagent-lang:react-specialist", Scope: "src/**/*.tsx"},
+	"expo":         {Keywords: []string{"expo", "react-native"}, Scope: "src/**/*.tsx"},
+	"react-native": {Keywords: []string{"expo", "react-native"}, Scope: "src/**/*.tsx"},
+	"ionic":        {Keywords: []string{"react", "ionic"}, Scope: "src/**/*.tsx"},
+	"capacitor":    {Keywords: []string{"react", "capacitor"}, Scope: "src/**/*.tsx"},
 
 	// --- JS/TS Desktop ---
-	"electron": {Agent: "voltagent-core-dev:electron-pro", Scope: "src/**/*.ts"},
-	"tauri":    {Agent: "voltagent-lang:rust-engineer", Scope: "src-tauri/**/*.rs"},
+	"electron": {Keywords: []string{"electron"}, Scope: "src/**/*.ts"},
+	"tauri":    {Keywords: []string{"rust", "tauri"}, Scope: "src-tauri/**/*.rs"},
 
 	// --- Python ---
-	"fastapi":   {Agent: "voltagent-lang:fastapi-developer", Scope: "**/*.py"},
-	"django":    {Agent: "voltagent-lang:django-developer", Scope: "**/*.py"},
-	"flask":     {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
-	"starlette": {Agent: "voltagent-lang:fastapi-developer", Scope: "**/*.py"},
-	"pyramid":   {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
-	"litestar":  {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
-	"streamlit": {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
-	"gradio":    {Agent: "voltagent-lang:python-pro", Scope: "**/*.py"},
-	"jupyter":   {Agent: "voltagent-lang:python-pro", Scope: "**/*.ipynb"},
+	"fastapi":   {Keywords: []string{"fastapi"}, Scope: "**/*.py"},
+	"django":    {Keywords: []string{"django"}, Scope: "**/*.py"},
+	"flask":     {Keywords: []string{"python", "flask"}, Scope: "**/*.py"},
+	"starlette": {Keywords: []string{"fastapi", "starlette"}, Scope: "**/*.py"},
+	"pyramid":   {Keywords: []string{"python", "pyramid"}, Scope: "**/*.py"},
+	"litestar":  {Keywords: []string{"python", "litestar"}, Scope: "**/*.py"},
+	"streamlit": {Keywords: []string{"python", "streamlit"}, Scope: "**/*.py"},
+	"gradio":    {Keywords: []string{"python", "gradio"}, Scope: "**/*.py"},
+	"jupyter":   {Keywords: []string{"python", "jupyter"}, Scope: "**/*.ipynb"},
 
 	// --- Go ---
-	"go":      {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
-	"gin":     {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
-	"fiber":   {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
-	"echo":    {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
-	"chi":     {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
-	"buffalo": {Agent: "voltagent-lang:golang-pro", Scope: "**/*.go"},
+	"go":      {Keywords: []string{"golang", "go"}, Scope: "**/*.go"},
+	"gin":     {Keywords: []string{"golang", "gin"}, Scope: "**/*.go"},
+	"fiber":   {Keywords: []string{"golang", "fiber"}, Scope: "**/*.go"},
+	"echo":    {Keywords: []string{"golang", "echo"}, Scope: "**/*.go"},
+	"chi":     {Keywords: []string{"golang", "chi"}, Scope: "**/*.go"},
+	"buffalo": {Keywords: []string{"golang", "buffalo"}, Scope: "**/*.go"},
 
 	// --- Rust ---
-	"rust":   {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
-	"axum":   {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
-	"actix":  {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
-	"rocket": {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
-	"warp":   {Agent: "voltagent-lang:rust-engineer", Scope: "src/**/*.rs"},
+	"rust":   {Keywords: []string{"rust"}, Scope: "src/**/*.rs"},
+	"axum":   {Keywords: []string{"rust", "axum"}, Scope: "src/**/*.rs"},
+	"actix":  {Keywords: []string{"rust", "actix"}, Scope: "src/**/*.rs"},
+	"rocket": {Keywords: []string{"rust", "rocket"}, Scope: "src/**/*.rs"},
+	"warp":   {Keywords: []string{"rust", "warp"}, Scope: "src/**/*.rs"},
 
 	// --- Dart ---
-	"flutter": {Agent: "voltagent-lang:flutter-expert", Scope: "lib/**/*.dart"},
+	"flutter": {Keywords: []string{"flutter"}, Scope: "lib/**/*.dart"},
 
 	// --- Ruby ---
-	"rails":   {Agent: "voltagent-lang:rails-expert", Scope: "app/**/*.rb"},
-	"sinatra": {Agent: "voltagent-lang:rails-expert", Scope: "**/*.rb"},
-	"jekyll":  {Agent: "voltagent-lang:rails-expert", Scope: "**/*.rb"},
+	"rails":   {Keywords: []string{"rails"}, Scope: "app/**/*.rb"},
+	"sinatra": {Keywords: []string{"rails", "ruby", "sinatra"}, Scope: "**/*.rb"},
+	"jekyll":  {Keywords: []string{"rails", "ruby", "jekyll"}, Scope: "**/*.rb"},
 
 	// --- PHP ---
-	"laravel":   {Agent: "voltagent-lang:laravel-specialist", Scope: "app/**/*.php"},
-	"symfony":   {Agent: "voltagent-lang:symfony-specialist", Scope: "src/**/*.php"},
-	"wordpress": {Agent: "voltagent-lang:php-pro", Scope: "**/*.php"},
+	"laravel":   {Keywords: []string{"laravel"}, Scope: "app/**/*.php"},
+	"symfony":   {Keywords: []string{"symfony"}, Scope: "src/**/*.php"},
+	"wordpress": {Keywords: []string{"php", "wordpress"}, Scope: "**/*.php"},
 
 	// --- C# / .NET ---
-	"dotnet": {Agent: "voltagent-lang:dotnet-core-expert", Scope: "**/*.cs"},
-	"maui":   {Agent: "voltagent-lang:dotnet-core-expert", Scope: "**/*.cs"},
+	"dotnet": {Keywords: []string{"dotnet"}, Scope: "**/*.cs"},
+	"maui":   {Keywords: []string{"dotnet", "maui"}, Scope: "**/*.cs"},
 
 	// --- Elixir / Erlang / BEAM ---
-	"phoenix": {Agent: "voltagent-lang:elixir-expert", Scope: "lib/**/*.ex"},
-	"elixir":  {Agent: "voltagent-lang:elixir-expert", Scope: "lib/**/*.ex"},
-	"erlang":  {Agent: "voltagent-lang:elixir-expert", Scope: "src/**/*.erl"},
-	"gleam":   {Agent: "voltagent-lang:elixir-expert", Scope: "src/**/*.gleam"},
+	"phoenix": {Keywords: []string{"elixir", "phoenix"}, Scope: "lib/**/*.ex"},
+	"elixir":  {Keywords: []string{"elixir"}, Scope: "lib/**/*.ex"},
+	"erlang":  {Keywords: []string{"elixir", "erlang"}, Scope: "src/**/*.erl"},
+	"gleam":   {Keywords: []string{"elixir", "gleam"}, Scope: "src/**/*.gleam"},
 
 	// --- JVM (non-Java/Kotlin) ---
-	"scala":   {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.scala"},
-	"play":    {Agent: "voltagent-lang:java-architect", Scope: "app/**/*.scala"},
-	"akka":    {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.scala"},
-	"clojure": {Agent: "voltagent-lang:java-architect", Scope: "src/**/*.clj"},
-	"grails":  {Agent: "voltagent-lang:java-architect", Scope: "grails-app/**/*.groovy"},
+	"scala":   {Keywords: []string{"java", "scala"}, Scope: "src/**/*.scala"},
+	"play":    {Keywords: []string{"java", "scala", "play"}, Scope: "app/**/*.scala"},
+	"akka":    {Keywords: []string{"java", "scala", "akka"}, Scope: "src/**/*.scala"},
+	"clojure": {Keywords: []string{"java", "clojure"}, Scope: "src/**/*.clj"},
+	"grails":  {Keywords: []string{"java", "groovy", "grails"}, Scope: "grails-app/**/*.groovy"},
 
 	// --- C / C++ ---
-	"c":   {Agent: "voltagent-lang:cpp-pro", Scope: "src/**/*.c"},
-	"cpp": {Agent: "voltagent-lang:cpp-pro", Scope: "src/**/*.cpp"},
+	"c":   {Keywords: []string{"cpp", "c"}, Scope: "src/**/*.c"},
+	"cpp": {Keywords: []string{"cpp"}, Scope: "src/**/*.cpp"},
 
 	// --- Systems / Emerging ---
-	"zig":     {Agent: "voltagent-lang:cpp-pro", Scope: "src/**/*.zig"},
-	"nim":     {Agent: "voltagent-lang:python-pro", Scope: "src/**/*.nim"},
-	"vlang":   {Agent: "voltagent-lang:golang-pro", Scope: "src/**/*.v"},
-	"crystal": {Agent: "voltagent-lang:rails-expert", Scope: "src/**/*.cr"},
+	"zig":     {Keywords: []string{"cpp", "zig"}, Scope: "src/**/*.zig"},
+	"nim":     {Keywords: []string{"python", "nim"}, Scope: "src/**/*.nim"},
+	"vlang":   {Keywords: []string{"golang", "vlang"}, Scope: "src/**/*.v"},
+	"crystal": {Keywords: []string{"rails", "ruby", "crystal"}, Scope: "src/**/*.cr"},
 
 	// --- Functional ---
-	"haskell": {Agent: "voltagent-lang:elixir-expert", Scope: "src/**/*.hs"},
-	"ocaml":   {Agent: "voltagent-lang:elixir-expert", Scope: "lib/**/*.ml"},
+	"haskell": {Keywords: []string{"elixir", "haskell"}, Scope: "src/**/*.hs"},
+	"ocaml":   {Keywords: []string{"elixir", "ocaml"}, Scope: "lib/**/*.ml"},
 
 	// --- Scientific / Data ---
-	"julia": {Agent: "voltagent-lang:python-pro", Scope: "src/**/*.jl"},
-	"r":     {Agent: "voltagent-lang:python-pro", Scope: "R/**/*.R"},
+	"julia": {Keywords: []string{"python", "julia"}, Scope: "src/**/*.jl"},
+	"r":     {Keywords: []string{"python", "r"}, Scope: "R/**/*.R"},
 
 	// --- Scripting ---
-	"lua":  {Agent: "voltagent-lang:javascript-pro", Scope: "**/*.lua"},
-	"perl": {Agent: "voltagent-lang:python-pro", Scope: "lib/**/*.pm"},
+	"lua":  {Keywords: []string{"javascript", "lua"}, Scope: "**/*.lua"},
+	"perl": {Keywords: []string{"python", "perl"}, Scope: "lib/**/*.pm"},
 
 	// --- Static Site Generators ---
-	"hugo": {Agent: "voltagent-lang:golang-pro", Scope: "content/**/*.md"},
+	"hugo": {Keywords: []string{"golang", "hugo"}, Scope: "content/**/*.md"},
 
 	// --- Infra ---
-	"docker":         {Agent: "voltagent-infra:docker-expert", Scope: "**/Dockerfile"},
-	"terraform":      {Agent: "voltagent-infra:terraform-engineer", Scope: "**/*.tf"},
-	"helm":           {Agent: "voltagent-infra:kubernetes-specialist", Scope: "**/*.yaml"},
-	"pulumi":         {Agent: "voltagent-infra:cloud-architect", Scope: "**/*"},
-	"ansible":        {Agent: "voltagent-infra:devops-engineer", Scope: "**/*.yml"},
-	"github-actions": {Agent: "voltagent-infra:deployment-engineer", Scope: ".github/workflows/**/*.yml"},
+	"docker":         {Keywords: []string{"docker"}, Scope: "**/Dockerfile"},
+	"terraform":      {Keywords: []string{"terraform"}, Scope: "**/*.tf"},
+	"helm":           {Keywords: []string{"kubernetes", "helm"}, Scope: "**/*.yaml"},
+	"pulumi":         {Keywords: []string{"cloud", "architect", "pulumi"}, Scope: "**/*"},
+	"ansible":        {Keywords: []string{"devops", "ansible"}, Scope: "**/*.yml"},
+	"github-actions": {Keywords: []string{"deployment", "github"}, Scope: ".github/workflows/**/*.yml"},
 }
 
-const (
-	defaultFrontend = "voltagent-lang:vue-expert"
-	defaultUI       = "voltagent-core-dev:ui-designer"
-	defaultSecurity = "voltagent-infra:security-engineer"
-	defaultDevops   = "devops-orchestrator"
-	defaultAPI      = "voltagent-core-dev:api-designer"
-	defaultDiag     = "kotlin-diagnostics"
-	defaultTest     = "test-spring"
-	defaultMobile   = "kotlin-multiplatform-developer"
-)
+// MatchAgent finds best agent from discovered list by keyword scoring.
+// Returns empty string if no match found.
+func MatchAgent(discovered []string, keywords []string) string {
+	if len(discovered) == 0 || len(keywords) == 0 {
+		return ""
+	}
 
-func Resolve(stacks []detector.Stack, _discovered []string, _harnessName string) AgentConfig {
-	config := AgentConfig{}
+	bestAgent := ""
+	bestScore := 0
 
-	// Determine primary language from stacks
-	primaryLang := ""
-	frontendName := ""
-	for _, s := range stacks {
-		if s.Category == "backend" && primaryLang == "" {
-			primaryLang = s.Lang
+	for _, agent := range discovered {
+		lower := strings.ToLower(agent)
+		score := 0
+		for _, kw := range keywords {
+			if strings.Contains(lower, strings.ToLower(kw)) {
+				score++
+			}
 		}
-		if s.Category == "frontend" || s.Category == "shared" {
-			frontendName = s.Name
+		if score > bestScore {
+			bestScore = score
+			bestAgent = agent
 		}
 	}
-	if primaryLang == "" && len(stacks) > 0 {
-		primaryLang = stacks[0].Lang
+
+	return bestAgent
+}
+
+// matchWithFallback matches agent from discovered list, with harness-specific fallback.
+// For claude-code: fallback to "general-purpose" (built-in).
+// For other harnesses: no fallback (empty string).
+func matchWithFallback(discovered []string, keywords []string, harnessName string) string {
+	agent := MatchAgent(discovered, keywords)
+	if agent != "" {
+		return agent
 	}
+	if harnessName == "claude-code" {
+		return "general-purpose"
+	}
+	return ""
+}
+
+// matchRole resolves a consilium role agent from discovered agents.
+func matchRole(discovered []string, langMap map[string][]string, langKey string, defaultKW []string, harnessName string) string {
+	kw := defaultKW
+	if langKW, ok := langMap[langKey]; ok {
+		kw = langKW
+	}
+	return matchWithFallback(discovered, kw, harnessName)
+}
+
+func Resolve(stacks []detector.Stack, discovered []string, harnessName string) AgentConfig {
+	config := AgentConfig{
+		Models: DefaultModelTiers(),
+	}
+
+	primaryLang, frontendName := extractLangAndFrontend(stacks)
 
 	// Consilium roles
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "architect",
-		Agent: lookupOrDefault(architectMap, primaryLang, "voltagent-lang:java-architect"),
+		Agent: matchRole(discovered, architectKeywords, primaryLang, defaultRoleKeywords["architect"], harnessName),
 	})
-
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "frontend",
-		Agent: lookupOrDefault(frontendMap, frontendName, defaultFrontend),
+		Agent: matchRole(discovered, frontendKeywords, frontendName, defaultRoleKeywords["frontend"], harnessName),
 	})
-	config.Consilium = append(config.Consilium, ConsiliumRole{Role: "ui", Agent: defaultUI})
+	config.Consilium = append(config.Consilium, ConsiliumRole{
+		Role:  "ui",
+		Agent: matchWithFallback(discovered, defaultRoleKeywords["ui"], harnessName),
+	})
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "security",
-		Agent: lookupOrDefault(securityMap, primaryLang, defaultSecurity),
+		Agent: matchRole(discovered, securityKeywords, primaryLang, defaultRoleKeywords["security"], harnessName),
 	})
-	config.Consilium = append(config.Consilium, ConsiliumRole{Role: "devops", Agent: defaultDevops})
-	config.Consilium = append(config.Consilium, ConsiliumRole{Role: "api", Agent: defaultAPI})
+	config.Consilium = append(config.Consilium, ConsiliumRole{
+		Role:  "devops",
+		Agent: matchWithFallback(discovered, defaultRoleKeywords["devops"], harnessName),
+	})
+	config.Consilium = append(config.Consilium, ConsiliumRole{
+		Role:  "api",
+		Agent: matchWithFallback(discovered, defaultRoleKeywords["api"], harnessName),
+	})
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "diagnostics",
-		Agent: lookupOrDefault(diagnosticsMap, primaryLang, defaultDiag),
+		Agent: matchRole(discovered, diagnosticsKeywords, primaryLang, defaultRoleKeywords["diagnostics"], harnessName),
 	})
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "test",
-		Agent: lookupOrDefault(testMap, primaryLang, defaultTest),
+		Agent: matchRole(discovered, testKeywords, primaryLang, defaultRoleKeywords["test"], harnessName),
 	})
 	config.Consilium = append(config.Consilium, ConsiliumRole{
 		Role:  "mobile",
-		Agent: lookupOrDefault(mobileMap, primaryLang, defaultMobile),
+		Agent: matchRole(discovered, mobileKeywords, primaryLang, defaultRoleKeywords["mobile"], harnessName),
 	})
 
 	// Exec agents from detected stacks
 	for _, s := range stacks {
-		if ea, ok := execMap[s.Name]; ok {
-			scope := buildScope(s, ea)
-			config.Exec = append(config.Exec, ExecAgent{
-				Agent: ea.Agent,
-				Scope: scope,
-			})
+		if ek, ok := execKeywords[s.Name]; ok {
+			agent := matchWithFallback(discovered, ek.Keywords, harnessName)
+			if agent != "" {
+				scope := buildScopeFromKeywords(s, ek)
+				config.Exec = append(config.Exec, ExecAgent{
+					Agent: agent,
+					Scope: scope,
+				})
+			}
 		}
 	}
 
 	return config
 }
 
-// --- Structure + Suggestions API (v0.2.0) ---
+// --- Structure + Suggestions API ---
 
 type AgentStructure struct {
 	Roles      []string
@@ -326,8 +404,9 @@ type ExecScope struct {
 }
 
 type Suggestions struct {
-	Consilium map[string]string // role -> suggested agent
-	Exec      map[string]string // stackName -> suggested agent
+	Consilium  map[string]string // role -> suggested agent
+	Exec       map[string]string // stackName -> suggested agent
+	ModelTiers map[string]string // role -> suggested tier (high/medium/low)
 }
 
 func ResolveStructure(stacks []detector.Stack) AgentStructure {
@@ -338,8 +417,8 @@ func ResolveStructure(stacks []detector.Stack) AgentStructure {
 
 	// Exec scopes from detected stacks
 	for _, st := range stacks {
-		if ea, ok := execMap[st.Name]; ok {
-			scope := buildScope(st, ea)
+		if ek, ok := execKeywords[st.Name]; ok {
+			scope := buildScopeFromKeywords(st, ek)
 			s.ExecScopes = append(s.ExecScopes, ExecScope{
 				StackName: st.Name,
 				Scope:     scope,
@@ -350,12 +429,56 @@ func ResolveStructure(stacks []detector.Stack) AgentStructure {
 	return s
 }
 
-func GetSuggestions(stacks []detector.Stack, _discovered []string, _harnessName string) Suggestions {
+func GetSuggestions(stacks []detector.Stack, discovered []string, harnessName string) Suggestions {
 	sug := Suggestions{
-		Consilium: make(map[string]string),
-		Exec:      make(map[string]string),
+		Consilium:  make(map[string]string),
+		Exec:       make(map[string]string),
+		ModelTiers: DefaultModelTiers(),
 	}
 
+	primaryLang, frontendName := extractLangAndFrontend(stacks)
+
+	// Consilium suggestions
+	sug.Consilium["architect"] = matchRole(discovered, architectKeywords, primaryLang, defaultRoleKeywords["architect"], harnessName)
+	sug.Consilium["frontend"] = matchRole(discovered, frontendKeywords, frontendName, defaultRoleKeywords["frontend"], harnessName)
+	sug.Consilium["ui"] = matchWithFallback(discovered, defaultRoleKeywords["ui"], harnessName)
+	sug.Consilium["security"] = matchRole(discovered, securityKeywords, primaryLang, defaultRoleKeywords["security"], harnessName)
+	sug.Consilium["devops"] = matchWithFallback(discovered, defaultRoleKeywords["devops"], harnessName)
+	sug.Consilium["api"] = matchWithFallback(discovered, defaultRoleKeywords["api"], harnessName)
+	sug.Consilium["diagnostics"] = matchRole(discovered, diagnosticsKeywords, primaryLang, defaultRoleKeywords["diagnostics"], harnessName)
+	sug.Consilium["test"] = matchRole(discovered, testKeywords, primaryLang, defaultRoleKeywords["test"], harnessName)
+	sug.Consilium["mobile"] = matchRole(discovered, mobileKeywords, primaryLang, defaultRoleKeywords["mobile"], harnessName)
+
+	// Exec suggestions
+	for _, st := range stacks {
+		if ek, ok := execKeywords[st.Name]; ok {
+			agent := matchWithFallback(discovered, ek.Keywords, harnessName)
+			if agent != "" {
+				sug.Exec[st.Name] = agent
+			}
+		}
+	}
+
+	return sug
+}
+
+// buildScopeFromKeywords generates the correct glob scope using detected path.
+func buildScopeFromKeywords(s detector.Stack, ek ExecKeywords) string {
+	if s.Path == "." || s.Path == "./" {
+		return ek.Scope
+	}
+
+	detectedDir := strings.TrimSuffix(s.Path, "/")
+
+	parts := strings.SplitN(ek.Scope, "/", 2)
+	if len(parts) == 2 {
+		return detectedDir + "/" + parts[1]
+	}
+	return detectedDir + "/**"
+}
+
+// extractLangAndFrontend extracts primary language and frontend name from stacks.
+func extractLangAndFrontend(stacks []detector.Stack) (string, string) {
 	primaryLang := ""
 	frontendName := ""
 	for _, s := range stacks {
@@ -369,50 +492,5 @@ func GetSuggestions(stacks []detector.Stack, _discovered []string, _harnessName 
 	if primaryLang == "" && len(stacks) > 0 {
 		primaryLang = stacks[0].Lang
 	}
-
-	// Consilium suggestions — every role always gets a default
-	sug.Consilium["architect"] = lookupOrDefault(architectMap, primaryLang, "voltagent-lang:java-architect")
-	sug.Consilium["frontend"] = lookupOrDefault(frontendMap, frontendName, defaultFrontend)
-	sug.Consilium["ui"] = defaultUI
-	sug.Consilium["security"] = lookupOrDefault(securityMap, primaryLang, defaultSecurity)
-	sug.Consilium["devops"] = defaultDevops
-	sug.Consilium["api"] = defaultAPI
-	sug.Consilium["diagnostics"] = lookupOrDefault(diagnosticsMap, primaryLang, defaultDiag)
-	sug.Consilium["test"] = lookupOrDefault(testMap, primaryLang, defaultTest)
-	sug.Consilium["mobile"] = lookupOrDefault(mobileMap, primaryLang, defaultMobile)
-
-	// Exec suggestions
-	for _, st := range stacks {
-		if ea, ok := execMap[st.Name]; ok {
-			sug.Exec[st.Name] = ea.Agent
-		}
-	}
-
-	return sug
-}
-
-// buildScope generates the correct glob scope using the detected path.
-// If the detected path differs from the hardcoded exec scope prefix,
-// replace the prefix with the actual detected path.
-func buildScope(s detector.Stack, ea ExecAgent) string {
-	if s.Path == "." || s.Path == "./" {
-		return ea.Scope
-	}
-
-	detectedDir := strings.TrimSuffix(s.Path, "/")
-
-	// Extract the file extension pattern from the default scope (e.g. "**/*.kt")
-	// Default scope format: "prefix/**/*.ext" or "prefix/**"
-	parts := strings.SplitN(ea.Scope, "/", 2)
-	if len(parts) == 2 {
-		return detectedDir + "/" + parts[1]
-	}
-	return detectedDir + "/**"
-}
-
-func lookupOrDefault(m map[string]string, key, fallback string) string {
-	if v, ok := m[key]; ok {
-		return v
-	}
-	return fallback
+	return primaryLang, frontendName
 }

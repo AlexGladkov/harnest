@@ -48,6 +48,37 @@ func (g *QwenCodeGenerator) Generate(projectDir string, stacks []detector.Stack,
 	}
 	b.WriteString("\n")
 
+	// Model recommendations (Qwen-specific models)
+	if len(agents.Models) > 0 {
+		b.WriteString("## Model Recommendations\n")
+		b.WriteString("For best results with Qwen models:\n\n")
+		var high, standard, low []string
+		for _, c := range agents.Consilium {
+			if c.Agent == "" {
+				continue
+			}
+			tier := agents.Models[c.Role]
+			switch tier {
+			case "high":
+				high = append(high, c.Role)
+			case "low":
+				low = append(low, c.Role)
+			default:
+				standard = append(standard, c.Role)
+			}
+		}
+		if len(high) > 0 {
+			b.WriteString(fmt.Sprintf("- %s — use qwen-max\n", strings.Join(high, ", ")))
+		}
+		if len(standard) > 0 {
+			b.WriteString(fmt.Sprintf("- %s — use qwen-plus\n", strings.Join(standard, ", ")))
+		}
+		if len(low) > 0 {
+			b.WriteString(fmt.Sprintf("- %s — use qwen-turbo\n", strings.Join(low, ", ")))
+		}
+		b.WriteString("\n")
+	}
+
 	outPath := filepath.Join(projectDir, "QWEN.md")
 	if _, err := os.Stat(outPath); err == nil {
 		outPath = filepath.Join(projectDir, "QWEN.generated.md")

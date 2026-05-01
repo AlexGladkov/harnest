@@ -32,6 +32,31 @@ func (g *WindsurfGenerator) Generate(projectDir string, stacks []detector.Stack,
 	}
 	b.WriteString("\n")
 
+	// Model recommendations
+	if len(agents.Models) > 0 {
+		b.WriteString("## Model Recommendations\n")
+		b.WriteString("For best results, use higher-capability models for these roles:\n\n")
+		var high, standard []string
+		for _, c := range agents.Consilium {
+			if c.Agent == "" {
+				continue
+			}
+			tier := agents.Models[c.Role]
+			if tier == "high" {
+				high = append(high, c.Role)
+			} else {
+				standard = append(standard, c.Role)
+			}
+		}
+		if len(high) > 0 {
+			b.WriteString(fmt.Sprintf("- %s — use the most capable model available\n", strings.Join(high, ", ")))
+		}
+		if len(standard) > 0 {
+			b.WriteString(fmt.Sprintf("- %s — standard model is sufficient\n", strings.Join(standard, ", ")))
+		}
+		b.WriteString("\n")
+	}
+
 	outPath := filepath.Join(projectDir, ".windsurfrules")
 	if _, err := os.Stat(outPath); err == nil {
 		outPath = filepath.Join(projectDir, ".windsurfrules.generated")

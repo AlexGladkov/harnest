@@ -1,4 +1,4 @@
-VERSION := 0.5.0
+VERSION := 0.10.0
 BINARY := harnest
 MODULE := github.com/AlexGladkov/harnest
 

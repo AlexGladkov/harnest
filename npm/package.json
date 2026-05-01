@@ -1,6 +1,6 @@
 {
   "name": "harnest",
-  "version": "0.5.0",
+  "version": "0.10.0",
   "description": "AI coding assistant configurator — generate configs for Claude Code, Cursor, Windsurf, Codex, OpenCode, and Qwen Code",
   "license": "CC-BY-NC-4.0",
   "repository": {
