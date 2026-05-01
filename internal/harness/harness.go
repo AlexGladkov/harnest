@@ -34,6 +34,37 @@ var registry = map[string]HarnessInfo{
 	"qwen-code":   {Generator: &QwenCodeGenerator{}, AgentDir: ".qwen/agents", GlobalConfigFile: "QWEN.md"},
 }
 
+// TierMap maps capability tier to concrete model name for a harness.
+type TierMap map[string]string
+
+var tierMaps = map[string]TierMap{
+	"claude-code": {"high": "opus", "medium": "sonnet", "low": "haiku"},
+	"cursor":      {"high": "claude-sonnet-4", "medium": "claude-sonnet-4", "low": "claude-haiku"},
+	"windsurf":    {"high": "claude-sonnet-4", "medium": "claude-sonnet-4", "low": "claude-haiku"},
+	"codex":       {"high": "o3", "medium": "o4-mini", "low": "o4-mini"},
+	"opencode":    {"high": "anthropic:claude-sonnet-4", "medium": "anthropic:claude-sonnet-4", "low": "anthropic:claude-haiku"},
+	"qwen-code":   {"high": "qwen-max", "medium": "qwen-plus", "low": "qwen-turbo"},
+}
+
+// ResolveTier converts a capability tier (high/medium/low) to a concrete model name
+// for the given harness. Returns tier unchanged if harness or tier not found.
+func ResolveTier(harnessName, tier string) string {
+	tm, ok := tierMaps[harnessName]
+	if !ok {
+		return tier
+	}
+	model, ok := tm[tier]
+	if !ok {
+		return tier // already a concrete model name
+	}
+	return model
+}
+
+// GetTierMap returns the tier→model mapping for a harness. Returns nil if not found.
+func GetTierMap(harnessName string) TierMap {
+	return tierMaps[harnessName]
+}
+
 func Get(name string) (Generator, error) {
 	h, ok := registry[name]
 	if !ok {

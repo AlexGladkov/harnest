@@ -53,6 +53,26 @@ func (g *ClaudeCodeGenerator) Generate(projectDir string, stacks []detector.Stac
 	}
 	b.WriteString("\n")
 
+	// Models
+	if len(agents.Models) > 0 {
+		b.WriteString("### Models\n")
+		b.WriteString("| Role | Model |\n")
+		b.WriteString("|------|-------|\n")
+		for _, c := range agents.Consilium {
+			if c.Agent == "" {
+				continue
+			}
+			tier := agents.Models[c.Role]
+			if tier == "" {
+				tier = "medium"
+			}
+			model := ResolveTier("claude-code", tier)
+			b.WriteString(fmt.Sprintf("| %s | %s |\n", c.Role, model))
+		}
+		b.WriteString("| * | sonnet |\n")
+		b.WriteString("\n")
+	}
+
 	outPath := filepath.Join(projectDir, "CLAUDE.md")
 
 	// Don't overwrite existing

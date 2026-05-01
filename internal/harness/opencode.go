@@ -20,6 +20,7 @@ type openCodeConfig struct {
 type openCodeAgent struct {
 	Mode        string `json:"mode"`
 	Description string `json:"description"`
+	Model       string `json:"model,omitempty"`
 }
 
 func (g *OpenCodeGenerator) Generate(projectDir string, stacks []detector.Stack, agents mapping.AgentConfig) (string, error) {
@@ -32,10 +33,14 @@ func (g *OpenCodeGenerator) Generate(projectDir string, stacks []detector.Stack,
 		if c.Agent == "" {
 			continue
 		}
-		cfg.Agent[c.Role] = openCodeAgent{
+		agent := openCodeAgent{
 			Mode:        "subagent",
 			Description: fmt.Sprintf("%s — %s", describeRole(c.Role), c.Agent),
 		}
+		if tier, ok := agents.Models[c.Role]; ok {
+			agent.Model = ResolveTier("opencode", tier)
+		}
+		cfg.Agent[c.Role] = agent
 	}
 
 	for _, e := range agents.Exec {

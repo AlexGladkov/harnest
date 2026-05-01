@@ -14,13 +14,16 @@ const maxShow = 5
 
 func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Suggestions) mapping.AgentConfig {
 	scanner := bufio.NewScanner(r)
-	config := mapping.AgentConfig{}
+	config := mapping.AgentConfig{
+		Models: make(map[string]string),
+	}
 
 	available := agents.Discover()
 
 	fmt.Println("\n── Agent Wizard ──")
 	fmt.Printf("Found %d agents on this machine\n", len(available))
-	fmt.Println("Enter = accept suggestion, s = skip, ? = search\n")
+	fmt.Println("Enter = accept suggestion, s = skip, ? = search")
+	fmt.Println()
 
 	for _, role := range structure.Roles {
 		suggestion := suggestions.Consilium[role]
@@ -30,6 +33,13 @@ func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Sugg
 				Role:  role,
 				Agent: agent,
 			})
+			// Pick model tier
+			tierSuggestion := suggestions.ModelTiers[role]
+			if tierSuggestion == "" {
+				tierSuggestion = "medium"
+			}
+			tier := pickTier(scanner, role, tierSuggestion)
+			config.Models[role] = tier
 		}
 	}
 
@@ -175,6 +185,30 @@ func searchLoop(scanner *bufio.Scanner, available []string) string {
 		} else {
 			fmt.Print("  Pick #, refine, or Enter to cancel: ")
 		}
+	}
+}
+
+func pickTier(scanner *bufio.Scanner, role, suggestion string) string {
+	fmt.Printf("  Model tier: %s  (h=high, m=medium, l=low, Enter=accept)\n", suggestion)
+	fmt.Print("  > ")
+
+	if !scanner.Scan() {
+		return suggestion
+	}
+	input := strings.TrimSpace(scanner.Text())
+
+	switch strings.ToLower(input) {
+	case "":
+		return suggestion
+	case "h", "high":
+		return "high"
+	case "m", "medium":
+		return "medium"
+	case "l", "low":
+		return "low"
+	default:
+		fmt.Printf("  Unknown tier '%s', using %s\n", input, suggestion)
+		return suggestion
 	}
 }
 

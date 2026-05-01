@@ -3,6 +3,7 @@ package converter
 import (
 	"fmt"
 
+	"github.com/AlexGladkov/harnest/internal/agents"
 	"github.com/AlexGladkov/harnest/internal/config"
 	"github.com/AlexGladkov/harnest/internal/detector"
 	"github.com/AlexGladkov/harnest/internal/harness"
@@ -14,17 +15,30 @@ func Convert(dir, from, to string) (string, error) {
 	// Try to read existing project config
 	cfg, err := config.ReadProject(dir)
 
-	var agents mapping.AgentConfig
+	var agentsCfg mapping.AgentConfig
 	if err != nil {
 		// No existing config — detect and generate fresh
 		fmt.Printf("No existing %s config found, detecting stack...\n", from)
 		stacks := detector.Detect(dir)
-		agents = mapping.Resolve(stacks)
+		discovered := agents.Discover()
+		agentsCfg = mapping.Resolve(stacks, discovered, to)
 	} else {
 		// Use existing config
-		agents = mapping.AgentConfig{
+		agentsCfg = mapping.AgentConfig{
 			Consilium: cfg.Consilium,
 			Exec:      cfg.Exec,
+			Models:    cfg.Models,
+		}
+		// Fill default tiers for roles without explicit model
+		if agentsCfg.Models == nil {
+			agentsCfg.Models = mapping.DefaultModelTiers()
+		} else {
+			defaults := mapping.DefaultModelTiers()
+			for role, tier := range defaults {
+				if _, ok := agentsCfg.Models[role]; !ok {
+					agentsCfg.Models[role] = tier
+				}
+			}
 		}
 	}
 
@@ -35,7 +49,7 @@ func Convert(dir, from, to string) (string, error) {
 		return "", fmt.Errorf("target harness: %w", err)
 	}
 
-	outPath, err := gen.Generate(dir, stacks, agents)
+	outPath, err := gen.Generate(dir, stacks, agentsCfg)
 	if err != nil {
 		return "", fmt.Errorf("generating %s config: %w", to, err)
 	}
