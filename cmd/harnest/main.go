@@ -25,8 +25,11 @@ const version = "0.11.0"
 
 func main() {
 	if len(os.Args) < 2 {
+		// No subcommand: show usage and exit successfully. Bare invocation is a
+		// help request, not an error (matches docker/kubectl). Keeps `winget`
+		// portable smoke-test happy and is the conventional CLI behavior.
 		printUsage()
-		os.Exit(1)
+		os.Exit(0)
 	}
 
 	switch os.Args[1] {
