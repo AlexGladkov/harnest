@@ -24,10 +24,16 @@ brew tap AlexGladkov/tap
 brew install harnest
 ```
 
-Or with npm:
+Or with npm (macOS / Linux):
 
 ```bash
 npm install -g harnest
+```
+
+On Windows, with [winget](https://learn.microsoft.com/windows/package-manager/):
+
+```powershell
+winget install AlexGladkov.Harnest
 ```
 
 Or with Go:
