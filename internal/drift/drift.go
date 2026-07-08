@@ -120,7 +120,7 @@ func Check(dir string) (*DriftResult, error) {
 	stacks := detector.Detect(dir)
 
 	// 3. Discover installed agents and build a lookup set.
-	discovered := agents_pkg.Discover()
+	discovered := agents_pkg.Discover(dir)
 	agentSet := make(map[string]bool, len(discovered))
 	for _, a := range discovered {
 		agentSet[a] = true

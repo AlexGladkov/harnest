@@ -4,3 +4,4 @@ dist/
 .DS_Store
 harnest-darwin-*
 harnest-linux-*
+.idea

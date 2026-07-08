@@ -21,7 +21,7 @@ import (
 	goyaml "gopkg.in/yaml.v3"
 )
 
-const version = "0.11.0"
+const version = "0.12.0"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -54,7 +54,7 @@ func main() {
 		runLocal()
 	case "config":
 		runConfig()
-	case "version":
+	case "version", "--version", "-v":
 		fmt.Printf("harnest v%s\n", version)
 	case "help", "--help", "-h":
 		printUsage()
@@ -127,14 +127,15 @@ func runInit() {
 	}
 
 	// Agent selection
-	discovered := agents_pkg.Discover()
+	discovered := agents_pkg.Discover(dir)
+
 	var agentsCfg mapping.AgentConfig
 	if nonInteractive {
 		agentsCfg = mapping.Resolve(stacks, discovered, harnessName)
 	} else {
 		structure := mapping.ResolveStructure(stacks)
 		suggestions := mapping.GetSuggestions(stacks, discovered, harnessName)
-		agentsCfg = wizard.Run(os.Stdin, structure, suggestions)
+		agentsCfg = wizard.Run(os.Stdin, structure, suggestions, discovered)
 	}
 
 	gen, err := harness.Get(harnessName)
@@ -264,7 +265,7 @@ func runAgents() {
 			// No project config — show what would be generated
 			fmt.Println("No project config found. Showing suggestions from detection:")
 			stacks := detector.Detect(dir)
-			disc := agents_pkg.Discover()
+			disc := agents_pkg.Discover(dir)
 			resolved := mapping.Resolve(stacks, disc, "claude-code")
 			printAgentConfig(resolved)
 			return

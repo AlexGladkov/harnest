@@ -290,7 +290,8 @@ Multi-stack projects are fully supported — each detected stack gets its own ex
 The wizard scans installed agents from multiple sources:
 
 - **Harness agent dirs**: `~/.claude/agents/`, `~/.cursor/agents/`, `~/.windsurf/agents/`, `~/.codex/agents/`, `~/.config/opencode/agents/`, `~/.qwen/agents/`
-- **Plugins**: `~/.claude/plugins/cache/*/plugin.json` — reads `agents` field, prefixes with plugin name
+- **Plugins**: `~/.claude/plugins/cache/*/plugin.json` — scans `<plugin>/agents/*.md` directory (primary) and explicit `agents` field in plugin.json (backward compat). Agents are namespaced as `plugin-name:agent-name`.
+- **Project agents** (`0.12.0+`): `<project>/.claude/agents/*.md`, `<project>/.cursor/agents/*.md`, `<project>/.windsurf/agents/*.md`, etc. — all registered harness agent dirs. YAML frontmatter with `name:` field, falls back to filename. Project agents take priority over global agents with the same name.
 
 Search with `?` in the wizard to filter by substring.
 

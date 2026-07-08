@@ -66,24 +66,20 @@ func detectKotlin(root string) []Stack {
 	// Spring Boot (Kotlin)
 	for _, dir := range allCandidateDirs(root) {
 		gradle := filepath.Join(root, dir, "build.gradle.kts")
-		if isSpringGradle(gradle) {
+		if isSpringGradle(gradle) && !hasStackInDir(stacks, dir) {
 			stacks = append(stacks, Stack{
 				Name: "spring-boot", Lang: "kotlin", Category: "backend", Path: relPath(dir),
 			})
-			break
 		}
 	}
 
 	// Ktor backend
 	for _, dir := range allCandidateDirs(root) {
 		gradle := filepath.Join(root, dir, "build.gradle.kts")
-		if fileContains(gradle, "io.ktor") {
-			if !hasStackInDir(stacks, dir) {
-				stacks = append(stacks, Stack{
-					Name: "ktor", Lang: "kotlin", Category: "backend", Path: relPath(dir),
-				})
-				break
-			}
+		if fileContains(gradle, "io.ktor") && !hasStackInDir(stacks, dir) {
+			stacks = append(stacks, Stack{
+				Name: "ktor", Lang: "kotlin", Category: "backend", Path: relPath(dir),
+			})
 		}
 	}
 
@@ -94,7 +90,6 @@ func detectKotlin(root string) []Stack {
 			stacks = append(stacks, Stack{
 				Name: "quarkus", Lang: "kotlin", Category: "backend", Path: relPath(dir),
 			})
-			break
 		}
 	}
 
@@ -105,7 +100,6 @@ func detectKotlin(root string) []Stack {
 			stacks = append(stacks, Stack{
 				Name: "micronaut", Lang: "kotlin", Category: "backend", Path: relPath(dir),
 			})
-			break
 		}
 	}
 
@@ -155,36 +149,40 @@ func detectJava(root string) []Stack {
 		// Spring Boot (Java)
 		if fileContains(pom, "spring-boot") || fileContains(pom, "springframework") ||
 			isSpringGradle(gradle) {
-			stacks = append(stacks, Stack{
-				Name: "spring-boot-java", Lang: "java", Category: "backend", Path: relPath(dir),
-			})
-			return stacks
+			if !hasStackInDir(stacks, dir) {
+				stacks = append(stacks, Stack{
+					Name: "spring-boot-java", Lang: "java", Category: "backend", Path: relPath(dir),
+				})
+			}
+			continue
 		}
 
 		// Quarkus (Java/Maven)
 		if fileContains(pom, "quarkus") || fileContains(gradle, "quarkus") {
-			stacks = append(stacks, Stack{
-				Name: "quarkus", Lang: "java", Category: "backend", Path: relPath(dir),
-			})
-			return stacks
+			if !hasStackInDir(stacks, dir) {
+				stacks = append(stacks, Stack{
+					Name: "quarkus", Lang: "java", Category: "backend", Path: relPath(dir),
+				})
+			}
+			continue
 		}
 
 		// Micronaut (Java/Maven)
 		if fileContains(pom, "micronaut") || fileContains(gradle, "micronaut") {
-			stacks = append(stacks, Stack{
-				Name: "micronaut", Lang: "java", Category: "backend", Path: relPath(dir),
-			})
-			return stacks
+			if !hasStackInDir(stacks, dir) {
+				stacks = append(stacks, Stack{
+					Name: "micronaut", Lang: "java", Category: "backend", Path: relPath(dir),
+				})
+			}
+			continue
 		}
 
 		// Plain Maven/Gradle Java (no specific framework)
 		if fileExists(pom) || fileExists(gradle) {
-			// Only detect if it's clearly a Java project (has src/main/java or .java files referenced)
-			if fileContains(pom, "java") || dirExists(filepath.Join(root, dir, "src", "main", "java")) {
+			if !hasStackInDir(stacks, dir) && (fileContains(pom, "java") || dirExists(filepath.Join(root, dir, "src", "main", "java"))) {
 				stacks = append(stacks, Stack{
 					Name: "java", Lang: "java", Category: "backend", Path: relPath(dir),
 				})
-				return stacks
 			}
 		}
 	}
@@ -572,6 +570,16 @@ func detectPHP(root string) []Stack {
 // ===========================================================================
 
 func detectDotNet(root string) []Stack {
+	var stacks []Stack
+	seen := map[string]bool{} // dedup by path
+
+	addStack := func(s Stack) {
+		if !seen[s.Path] {
+			seen[s.Path] = true
+			stacks = append(stacks, s)
+		}
+	}
+
 	for _, dir := range allCandidateDirs(root) {
 		entries, err := os.ReadDir(filepath.Join(root, dir))
 		if err != nil {
@@ -580,22 +588,25 @@ func detectDotNet(root string) []Stack {
 		for _, e := range entries {
 			if strings.HasSuffix(e.Name(), ".csproj") {
 				csproj := filepath.Join(root, dir, e.Name())
-				name := "dotnet"
 				if fileContains(csproj, "Maui") {
-					name = "maui"
-					return []Stack{{Name: name, Lang: "csharp", Category: "mobile", Path: relPath(dir)}}
+					addStack(Stack{Name: "maui", Lang: "csharp", Category: "mobile", Path: relPath(dir)})
+					break
 				}
-				if fileContains(csproj, "Microsoft.AspNetCore") || fileContains(csproj, "Microsoft.NET.Sdk.Web") {
-					return []Stack{{Name: name, Lang: "csharp", Category: "backend", Path: relPath(dir)}}
-				}
-				return []Stack{{Name: name, Lang: "csharp", Category: "backend", Path: relPath(dir)}}
+				addStack(Stack{Name: "dotnet", Lang: "csharp", Category: "backend", Path: relPath(dir)})
+				break // one .csproj per dir is enough
 			}
-			if strings.HasSuffix(e.Name(), ".sln") {
-				return []Stack{{Name: "dotnet", Lang: "csharp", Category: "backend", Path: relPath(dir)}}
+		}
+		// .sln/.slnx only if no .csproj found in this dir
+		if !seen[relPath(dir)] {
+			for _, e := range entries {
+				if strings.HasSuffix(e.Name(), ".sln") || strings.HasSuffix(e.Name(), ".slnx") {
+					addStack(Stack{Name: "dotnet", Lang: "csharp", Category: "backend", Path: relPath(dir)})
+					break
+				}
 			}
 		}
 	}
-	return nil
+	return stacks
 }
 
 // ===========================================================================
@@ -1013,15 +1024,45 @@ doneTerraform:
 // ===========================================================================
 
 func subdirs(root string) []string {
-	entries, err := os.ReadDir(root)
+	return subdirsDepth(root, "", 3)
+}
+
+// skipDirs are heavy/vendored/build directories never worth walking for stack
+// detection. With multi-level recursion, descending into these would blow up the
+// number of ReadDir calls and can yield false positives from build-artifact copies
+// of pom.xml/build.gradle/*.csproj.
+var skipDirs = map[string]bool{
+	"node_modules": true,
+	"vendor":       true,
+	"dist":         true,
+	"build":        true,
+	"out":          true,
+	"target":       true,
+	"bin":          true,
+	"obj":          true,
+}
+
+// subdirsDepth collects subdirectory paths up to maxDepth levels, skipping hidden,
+// vendored/build, and symlinked dirs (symlinks avoid traversal loops and escaping the tree).
+func subdirsDepth(root, prefix string, maxDepth int) []string {
+	if maxDepth <= 0 {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(root, prefix))
 	if err != nil {
 		return nil
 	}
 	var dirs []string
 	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-			dirs = append(dirs, e.Name())
+		if !e.IsDir() || e.Type()&os.ModeSymlink != 0 {
+			continue
 		}
+		if strings.HasPrefix(e.Name(), ".") || skipDirs[e.Name()] {
+			continue
+		}
+		path := filepath.Join(prefix, e.Name())
+		dirs = append(dirs, path)
+		dirs = append(dirs, subdirsDepth(root, path, maxDepth-1)...)
 	}
 	return dirs
 }
@@ -1042,7 +1083,7 @@ func relPath(dir string) string {
 	if dir == "." {
 		return "."
 	}
-	return dir + "/"
+	return filepath.ToSlash(dir) + "/"
 }
 
 func hasStackInDir(stacks []Stack, dir string) bool {

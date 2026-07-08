@@ -114,15 +114,36 @@ var mobileKeywords = map[string][]string{
 }
 
 var securityKeywords = map[string][]string{
-	"kotlin": {"security", "kotlin"},
+	"kotlin":     {"security", "kotlin"},
+	"csharp":     {"security", "dotnet", "csharp"},
+	"typescript": {"security", "typescript", "node"},
+	"python":     {"security", "python"},
+	"go":         {"security", "golang", "go"},
+	"rust":       {"security", "rust"},
+	"java":       {"security", "java", "spring"},
+	"swift":      {"security", "swift"},
 }
 
 var diagnosticsKeywords = map[string][]string{
-	"kotlin": {"diagnostics", "kotlin"},
+	"kotlin":     {"diagnostics", "kotlin"},
+	"csharp":     {"diagnostics", "dotnet", "csharp"},
+	"typescript": {"diagnostics", "typescript"},
+	"python":     {"diagnostics", "python"},
+	"go":         {"diagnostics", "golang", "go"},
+	"rust":       {"diagnostics", "rust"},
+	"java":       {"diagnostics", "java", "spring"},
+	"swift":      {"diagnostics", "swift"},
 }
 
 var testKeywords = map[string][]string{
-	"kotlin": {"test", "spring"},
+	"kotlin":     {"test", "spring", "qa"},
+	"csharp":     {"test", "dotnet", "csharp", "xunit", "nunit", "qa"},
+	"typescript": {"test", "typescript", "jest", "vitest", "qa"},
+	"python":     {"test", "python", "pytest", "qa"},
+	"go":         {"test", "golang", "go", "qa"},
+	"rust":       {"test", "rust", "cargo", "qa"},
+	"java":       {"test", "java", "spring", "junit", "qa"},
+	"swift":      {"test", "swift", "xctest", "qa"},
 }
 
 // defaultRoleKeywords — fallback keywords per role (used when lang not in map)
@@ -131,10 +152,10 @@ var defaultRoleKeywords = map[string][]string{
 	"frontend":    {"frontend", "vue"},
 	"ui":          {"ui", "designer"},
 	"security":    {"security"},
-	"devops":      {"devops"},
+	"devops":      {"devops", "infra", "sre", "platform", "deploy"},
 	"api":         {"api", "designer"},
 	"diagnostics": {"diagnostics"},
-	"test":        {"test"},
+	"test":        {"test", "qa", "tester"},
 	"mobile":      {"mobile", "multiplatform"},
 }
 
@@ -229,8 +250,8 @@ var execKeywords = map[string]ExecKeywords{
 	"wordpress": {Keywords: []string{"php", "wordpress"}, Scope: "**/*.php"},
 
 	// --- C# / .NET ---
-	"dotnet": {Keywords: []string{"dotnet"}, Scope: "**/*.cs"},
-	"maui":   {Keywords: []string{"dotnet", "maui"}, Scope: "**/*.cs"},
+	"dotnet": {Keywords: []string{"dotnet", "csharp"}, Scope: "**/*.cs"},
+	"maui":   {Keywords: []string{"dotnet", "maui", "csharp"}, Scope: "**/*.cs"},
 
 	// --- Elixir / Erlang / BEAM ---
 	"phoenix": {Keywords: []string{"elixir", "phoenix"}, Scope: "lib/**/*.ex"},
@@ -271,7 +292,7 @@ var execKeywords = map[string]ExecKeywords{
 	"hugo": {Keywords: []string{"golang", "hugo"}, Scope: "content/**/*.md"},
 
 	// --- Infra ---
-	"docker":         {Keywords: []string{"docker"}, Scope: "**/Dockerfile"},
+	"docker":         {Keywords: []string{"docker", "devops", "infra"}, Scope: "**/Dockerfile"},
 	"terraform":      {Keywords: []string{"terraform"}, Scope: "**/*.tf"},
 	"helm":           {Keywords: []string{"kubernetes", "helm"}, Scope: "**/*.yaml"},
 	"pulumi":         {Keywords: []string{"cloud", "architect", "pulumi"}, Scope: "**/*"},
@@ -321,10 +342,14 @@ func matchWithFallback(discovered []string, keywords []string, harnessName strin
 }
 
 // matchRole resolves a consilium role agent from discovered agents.
+// Combines default role keywords with language-specific keywords so role-name
+// matches (e.g. "security" for security role) get a scoring bonus over agents
+// that only match the language keyword (e.g. "csharp").
 func matchRole(discovered []string, langMap map[string][]string, langKey string, defaultKW []string, harnessName string) string {
-	kw := defaultKW
+	kw := make([]string, len(defaultKW))
+	copy(kw, defaultKW)
 	if langKW, ok := langMap[langKey]; ok {
-		kw = langKW
+		kw = append(kw, langKW...)
 	}
 	return matchWithFallback(discovered, kw, harnessName)
 }
@@ -472,6 +497,11 @@ func buildScopeFromKeywords(s detector.Stack, ek ExecKeywords) string {
 
 	parts := strings.SplitN(ek.Scope, "/", 2)
 	if len(parts) == 2 {
+		// Preserve "**/" wildcard so scope stays recursive.
+		// Example: **/*.py + path "backend" → "backend/**/*.py", not "backend/*.py"
+		if parts[0] == "**" {
+			return detectedDir + "/" + ek.Scope
+		}
 		return detectedDir + "/" + parts[1]
 	}
 	return detectedDir + "/**"

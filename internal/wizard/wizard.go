@@ -12,13 +12,11 @@ import (
 
 const maxShow = 5
 
-func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Suggestions) mapping.AgentConfig {
+func Run(r io.Reader, structure mapping.AgentStructure, suggestions mapping.Suggestions, available []string) mapping.AgentConfig {
 	scanner := bufio.NewScanner(r)
 	config := mapping.AgentConfig{
 		Models: make(map[string]string),
 	}
-
-	available := agents.Discover()
 
 	fmt.Println("\n── Agent Wizard ──")
 	fmt.Printf("Found %d agents on this machine\n", len(available))
