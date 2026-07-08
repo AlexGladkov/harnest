@@ -13,7 +13,8 @@ import (
 
 // Discover scans all installed agents: project-local (priority), global, and plugins.
 // projectDir may be empty — project scan is skipped.
-// Returns sorted list of agent names.
+// Returns agents in priority order: project-local first, then global, then plugins.
+// Insertion order is preserved — project agents win dedup ties in MatchAgent.
 func Discover(projectDir string) []string {
 	seen := map[string]bool{}
 	var result []string
@@ -27,11 +28,8 @@ func Discover(projectDir string) []string {
 
 	// 1. Project-local agents (priority — added first, win on dedup)
 	if projectDir != "" {
-		for _, dir := range harness.AgentDirs() {
-			agentsDir := filepath.Join(projectDir, dir)
-			for _, name := range scanWithFrontmatter(agentsDir, "") {
-				add(name)
-			}
+		for _, name := range scanProjectAgents(projectDir) {
+			add(name)
 		}
 	}
 
@@ -53,30 +51,29 @@ func Discover(projectDir string) []string {
 	return result
 }
 
-// DiscoverProject scans project-local agents for all registered harnesses.
-// Checks <projectDir>/<agentDir>/*.md for each harness (e.g. .claude/agents/,
-// .cursor/agents/, .windsurf/agents/, etc.). Reads YAML frontmatter: if "name"
-// field present, uses it; otherwise uses filename.
-// Files without frontmatter are skipped (not agents).
-func DiscoverProject(projectDir string) []string {
+// scanProjectAgents scans project-local agents across all registered harness dirs
+// (e.g. .claude/agents/, .cursor/agents/, .windsurf/agents/), preserving harness-dir
+// order and deduplicating. Reads YAML frontmatter: if "name" is present it is used,
+// otherwise the filename. Single source of truth shared by Discover (which keeps this
+// order so project agents win dedup ties) and DiscoverProject.
+func scanProjectAgents(projectDir string) []string {
 	seen := map[string]bool{}
-	add := func(name string) {
-		if name != "" && !seen[name] {
-			seen[name] = true
-		}
-	}
-
+	var result []string
 	for _, dir := range harness.AgentDirs() {
 		agentsDir := filepath.Join(projectDir, dir)
 		for _, name := range scanWithFrontmatter(agentsDir, "") {
-			add(name)
+			if name != "" && !seen[name] {
+				seen[name] = true
+				result = append(result, name)
+			}
 		}
 	}
+	return result
+}
 
-	agents := make([]string, 0, len(seen))
-	for name := range seen {
-		agents = append(agents, name)
-	}
+// DiscoverProject returns project-local agents (see scanProjectAgents), sorted.
+func DiscoverProject(projectDir string) []string {
+	agents := scanProjectAgents(projectDir)
 	sort.Strings(agents)
 	return agents
 }
@@ -110,7 +107,14 @@ type pluginJSON struct {
 //
 // Agent names are namespaced as "pluginName:agentName".
 func scanPlugins(root string) []string {
+	seen := map[string]bool{}
 	var result []string
+	add := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			result = append(result, name)
+		}
+	}
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -134,9 +138,7 @@ func scanPlugins(root string) []string {
 
 		// 1. Scan agents/ directory (primary method — Claude Code auto-discovers these)
 		agentsDir := filepath.Join(versionDir, "agents")
-		scanFlat(agentsDir, p.Name+":", func(name string) {
-			result = append(result, name)
-		})
+		scanFlat(agentsDir, p.Name+":", add)
 
 		// 2. Also process explicit "agents" field for backward compatibility
 		for _, agentPath := range p.Agents {
@@ -150,7 +152,7 @@ func scanPlugins(root string) []string {
 			if _, err := os.Stat(agentFile); err != nil {
 				continue
 			}
-			result = append(result, p.Name+":"+name)
+			add(p.Name + ":" + name)
 		}
 		return nil
 	})
@@ -189,7 +191,7 @@ type frontmatter struct {
 
 // scanWithFrontmatter reads *.md files from dir, parses YAML frontmatter.
 // If frontmatter has "name" field → uses it. Otherwise falls back to filename.
-// Files without frontmatter are skipped.
+// Only unreadable/empty/binary/oversized files are skipped.
 // Agent names are prefixed with prefix (e.g. plugin name + ":").
 func scanWithFrontmatter(dir, prefix string) []string {
 	entries, err := os.ReadDir(dir)
@@ -232,15 +234,18 @@ const maxAgentFileSize = 64 * 1024 // 64 KB
 //
 // Returns empty string only for unreadable files, empty files, binary files, or oversized files.
 func parseAgentName(filePath string) string {
+	// Stat first so oversized/empty files are rejected without buffering them in RAM.
+	info, err := os.Stat(filePath)
+	if err != nil || info.IsDir() || info.Size() == 0 || info.Size() > maxAgentFileSize {
+		return ""
+	}
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return ""
 	}
 
-	// Reject binary files (null bytes), empty files, and excessively large files.
-	if len(data) > maxAgentFileSize || len(data) == 0 {
-		return ""
-	}
+	// Reject binary files (null bytes).
 	if bytesContainsNull(data) {
 		return ""
 	}
@@ -262,8 +267,9 @@ func parseAgentName(filePath string) string {
 	content = strings.TrimPrefix(content, "---")
 	content = strings.TrimLeft(content, "\r\n")
 
-	// Find closing "---" on its own line
-	endIdx := strings.Index(content, "\n---")
+	// Find closing "---" on its own line (delimiter must be followed by EOL or EOF,
+	// so a value containing "----" or "\n---text" does not truncate frontmatter early).
+	endIdx := indexClosingDelim(content)
 	if endIdx == -1 {
 		return fallback
 	}
@@ -284,6 +290,24 @@ func parseAgentName(filePath string) string {
 	}
 
 	return fallback
+}
+
+// indexClosingDelim returns the index of a "\n---" frontmatter terminator whose
+// "---" stands on its own line (next byte is \n, \r, or EOF), or -1 if none.
+func indexClosingDelim(content string) int {
+	base := 0
+	for {
+		i := strings.Index(content[base:], "\n---")
+		if i == -1 {
+			return -1
+		}
+		abs := base + i
+		after := abs + 4 // byte past "\n---"
+		if after >= len(content) || content[after] == '\n' || content[after] == '\r' {
+			return abs
+		}
+		base = after
+	}
 }
 
 // bytesContainsNull checks if data contains a null byte (binary content).

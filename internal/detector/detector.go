@@ -1027,7 +1027,23 @@ func subdirs(root string) []string {
 	return subdirsDepth(root, "", 3)
 }
 
-// subdirsDepth collects subdirectory paths up to maxDepth levels, skipping hidden dirs.
+// skipDirs are heavy/vendored/build directories never worth walking for stack
+// detection. With multi-level recursion, descending into these would blow up the
+// number of ReadDir calls and can yield false positives from build-artifact copies
+// of pom.xml/build.gradle/*.csproj.
+var skipDirs = map[string]bool{
+	"node_modules": true,
+	"vendor":       true,
+	"dist":         true,
+	"build":        true,
+	"out":          true,
+	"target":       true,
+	"bin":          true,
+	"obj":          true,
+}
+
+// subdirsDepth collects subdirectory paths up to maxDepth levels, skipping hidden,
+// vendored/build, and symlinked dirs (symlinks avoid traversal loops and escaping the tree).
 func subdirsDepth(root, prefix string, maxDepth int) []string {
 	if maxDepth <= 0 {
 		return nil
@@ -1038,11 +1054,15 @@ func subdirsDepth(root, prefix string, maxDepth int) []string {
 	}
 	var dirs []string
 	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-			path := filepath.Join(prefix, e.Name())
-			dirs = append(dirs, path)
-			dirs = append(dirs, subdirsDepth(root, path, maxDepth-1)...)
+		if !e.IsDir() || e.Type()&os.ModeSymlink != 0 {
+			continue
 		}
+		if strings.HasPrefix(e.Name(), ".") || skipDirs[e.Name()] {
+			continue
+		}
+		path := filepath.Join(prefix, e.Name())
+		dirs = append(dirs, path)
+		dirs = append(dirs, subdirsDepth(root, path, maxDepth-1)...)
 	}
 	return dirs
 }

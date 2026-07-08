@@ -211,6 +211,28 @@ func TestParseAgentName(t *testing.T) {
 	}
 }
 
+func TestIndexClosingDelim(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"clean", "name: x\n---\nbody", 7},
+		{"eof", "name: x\n---", 7},
+		{"crlf", "name: x\n---\r\nbody", 7},
+		{"dashes-skipped", "name: x\n----\n---\nbody", 12},
+		{"text-after-skipped", "name: x\n---bad\n---\nbody", 14},
+		{"none", "name: x\nno delim", -1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := indexClosingDelim(c.in); got != c.want {
+				t.Errorf("indexClosingDelim(%q) = %d, want %d", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestScanPlugins_AgentsDirectory(t *testing.T) {
 	// Simulate plugin cache: <root>/marketplace/plugin/1.0.0/.claude-plugin/plugin.json
 	// with agents/ at version level

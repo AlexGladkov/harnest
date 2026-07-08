@@ -3,8 +3,37 @@ package detector
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestSubdirs_SkipsVendored(t *testing.T) {
+	root := t.TempDir()
+	for _, p := range []string{"src", "node_modules/foo", "vendor/bar", "build/x", "target/y"} {
+		if err := os.MkdirAll(filepath.Join(root, p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := subdirs(root)
+	for _, d := range got {
+		for _, skip := range []string{"node_modules", "vendor", "build", "target"} {
+			if strings.HasPrefix(d, skip) {
+				t.Errorf("subdirs returned vendored dir %q — should be skipped", d)
+			}
+		}
+	}
+
+	var hasSrc bool
+	for _, d := range got {
+		if d == "src" {
+			hasSrc = true
+		}
+	}
+	if !hasSrc {
+		t.Errorf("expected \"src\" in subdirs, got %v", got)
+	}
+}
 
 func TestDetectDotNet_Sln(t *testing.T) {
 	root := t.TempDir()
